@@ -6,7 +6,9 @@ import WorkerProfileScreen from '../screens/workers/WorkerProfileScreen';
 import PaySalaryScreen from '../screens/workers/PaySalaryScreen';
 import OTPConfirmScreen from '../screens/workers/OTPConfirmScreen';
 import PaymentConfirmationScreen from '../screens/workers/PaymentConfirmationScreen';
-import HistoryListScreen from '../screens/history/HistoryListScreen';
+
+import PaymentHistoryScreen from '../screens/workers/PaymentHistoryScreen';
+
 import AddWorkerScreen from '../screens/workers/AddWorkerScreen';
 import EditWorkerScreen from '../screens/workers/EditWorkerScreen';
 
@@ -20,7 +22,10 @@ export default function WorkersStack() {
       <Stack.Screen name="PaySalary" component={PaySalaryScreen} />
       <Stack.Screen name="OTPConfirm" component={OTPConfirmScreen} />
       <Stack.Screen name="PaymentConfirmation" component={PaymentConfirmationScreen} />
-      <Stack.Screen name="WorkerHistoryList" component={HistoryListScreen} />
+
+      <Stack.Screen name="WorkerHistoryList" component={PaymentHistoryScreen} />
+      <Stack.Screen name="PaymentHistory" component={PaymentHistoryScreen} />
+
       <Stack.Screen name="AddWorker" component={AddWorkerScreen} />
       <Stack.Screen name="EditWorker" component={EditWorkerScreen} />
     </Stack.Navigator>

@@ -1,12 +1,11 @@
 import React, { useState } from 'react';
-import { Alert, View } from 'react-native';
 import Screen from '../../components/layout/Screen';
 import AppHeader from '../../components/layout/AppHeader';
 import TextField from '../../components/primitives/TextField';
 import Button from '../../components/primitives/Button';
-import Card from '../../components/primitives/Card';
 import { spacing } from '../../theme/tokens';
 import { addWorker } from '../../services/workers';
+import { Alert, View } from 'react-native';
 
 export default function AddWorkerScreen({ navigation }: any) {
   const [name, setName] = useState('');
@@ -14,32 +13,29 @@ export default function AddWorkerScreen({ navigation }: any) {
   const [salary, setSalary] = useState('');
 
   async function onSave() {
-    const monthlySalaryAED = Number(salary || 0);
-    if (!name.trim()) { Alert.alert('Please enter a name'); return; }
-    if (Number.isNaN(monthlySalaryAED) || monthlySalaryAED <= 0) { Alert.alert('Enter a valid monthly salary'); return; }
-
     try {
-      await addWorker({ name: name.trim(), role: role.trim(), monthlySalaryAED });
+      const id = await addWorker({
+        name: name.trim(),
+        role: role.trim(),
+        monthlySalaryAED: Number(salary || 0),
+        avatarUrl: null,
+      });
       navigation.goBack();
+
     } catch (e: any) {
-      Alert.alert('Could not add worker', e?.message ?? 'Please try again.');
+      Alert.alert('Error', e?.message ?? 'Failed to save worker.');
     }
   }
 
   return (
-    <Screen scroll padded>
+    <Screen>
       <AppHeader title="Add Worker" onBack={() => navigation.goBack()} />
-
-      <Card>
-        <View style={{ gap: spacing.md }}>
-          <TextField label="Full name" value={name} onChangeText={setName} autoCapitalize="words" />
-          <TextField label="Role / Job Title" value={role} onChangeText={setRole} />
-          <TextField label="Monthly Salary (AED)" value={salary} onChangeText={setSalary} keyboardType="numeric" />
-        </View>
-      </Card>
-
-      <View style={{ height: spacing.lg }} />
-      <Button label="Save" tone="green" onPress={onSave} fullWidth />
+      <View style={{ padding: spacing.lg, gap: spacing.md }}>
+        <TextField label="Name" value={name} onChangeText={setName} />
+        <TextField label="Role" value={role} onChangeText={setRole} />
+        <TextField label="Monthly Salary (AED)" value={salary} onChangeText={setSalary} keyboardType="number-pad" />
+        <Button label="Save" onPress={onSave} fullWidth />
+      </View>
     </Screen>
   );
 }

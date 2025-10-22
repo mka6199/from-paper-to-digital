@@ -1,4 +1,3 @@
-// src/navigation/navigateToHistory.ts
 export function navigateToHistory(navigation: any, workerId?: string) {
     const parent = navigation.getParent?.();
     const goLocal = () =>

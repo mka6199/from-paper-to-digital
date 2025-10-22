@@ -9,16 +9,18 @@ export default function StatusPill({ status }: Props) {
   const key = String(status || '').toUpperCase() as PillStatus;
 
   const map: Record<PillStatus, { bg: string; fg: string; label: string }> = {
-    PAID:     { bg: colors.pillPaidBg, fg: colors.pillPaidFg, label: 'PAID' },
-    DUE:      { bg: colors.pillDueBg,  fg: colors.pillDueFg,  label: 'Due' },
-    OVERDUE:  { bg: colors.pillOverBg, fg: colors.pillOverFg, label: 'Overdue' },
+    PAID: { bg: '#E7F7EC', fg: colors.success, label: 'PAID' },
+    DUE: { bg: '#FFF4E6', fg: colors.warn, label: 'Due' },
+    OVERDUE: { bg: '#FCE8E8', fg: colors.danger, label: 'Overdue' },
   };
 
   const sty = map[key] ?? { bg: colors.divider, fg: colors.subtext, label: status ?? '—' };
 
   return (
     <View style={[styles.pill, { backgroundColor: sty.bg }]}>
-      <Text style={[typography.small, { color: sty.fg, fontWeight: '700' }]}>{sty.label}</Text>
+      <Text style={[typography.small, { color: sty.fg, fontWeight: '700' }]}>
+        {sty.label}
+      </Text>
     </View>
   );
 }

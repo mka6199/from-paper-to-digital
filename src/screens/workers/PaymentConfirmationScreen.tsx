@@ -25,7 +25,6 @@ export default function PaymentConfirmationScreen({ route, navigation }: any) {
         label="Back to Worker"
         tone="green"
         onPress={() => {
-          // Reset stack to JUST WorkersList -> WorkerProfile
           navigation.dispatch(
             CommonActions.reset({
               index: 1,
@@ -44,7 +43,6 @@ export default function PaymentConfirmationScreen({ route, navigation }: any) {
         variant="soft"
         tone="green"
         onPress={() => {
-          // Reset stack to WorkersList -> WorkerProfile -> WorkerHistoryList (scoped)
           navigation.dispatch(
             CommonActions.reset({
               index: 2,

@@ -1,18 +1,37 @@
-import React, { useCallback, useState } from 'react';
-import { FlatList, Pressable, Text, View, StyleSheet } from 'react-native';
+import React from 'react';
+import {
+  FlatList,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+  RefreshControl,
+} from 'react-native';
 import Screen from '../../components/layout/Screen';
 import AppHeader from '../../components/layout/AppHeader';
 import Card from '../../components/primitives/Card';
 import WorkerListItem from '../../components/composites/WorkerListItem';
 import { colors, spacing, typography } from '../../theme/tokens';
-import { listWorkers } from '../../services/workers';
+import { subscribeMyWorkers, listWorkers, Worker } from '../../services/workers';
 import { useFocusEffect } from '@react-navigation/native';
 
 export default function WorkersListScreen({ navigation }: any) {
-  const [rows, setRows] = useState<any[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [rows, setRows] = React.useState<Worker[]>([]);
+  const [loading, setLoading] = React.useState(false);
 
-  const load = useCallback(async () => {
+  useFocusEffect(
+    React.useCallback(() => {
+      let unsub: undefined | (() => void);
+      try {
+        unsub = subscribeMyWorkers((list) => setRows(list));
+      } catch (e) {
+        console.warn('subscribeMyWorkers failed:', e);
+      }
+      return () => unsub && unsub();
+    }, [])
+  );
+
+  const refresh = React.useCallback(async () => {
     setLoading(true);
     try {
       const data = await listWorkers();
@@ -22,22 +41,20 @@ export default function WorkersListScreen({ navigation }: any) {
     }
   }, []);
 
-  useFocusEffect(useCallback(() => { load(); }, [load]));
-
-  const renderItem = ({ item }: any) => (
-    <Card>
+  const renderItem = ({ item }: { item: Worker }) => (
+    <Card style={styles.card}>
       <WorkerListItem
         name={item.name}
-        role={item.role}
+        role={item.role ?? ''}
         onPress={() =>
           navigation.navigate('WorkerProfile', {
             id: item.id,
             worker: {
-              id: item.id,
+              id: item.id!,
               name: item.name ?? '',
               role: item.role ?? '',
-              monthlySalaryAED: Number(item.monthlySalaryAED ?? item.baseSalary ?? item.salary ?? 0),
-              avatarUrl: null,
+              monthlySalaryAED: Number(item.monthlySalaryAED ?? item.baseSalary ?? 0),
+              avatarUrl: item.avatarUrl ?? null,
             },
           })
         }
@@ -47,31 +64,39 @@ export default function WorkersListScreen({ navigation }: any) {
 
   return (
     <Screen>
-      <AppHeader title="Workers" />
+      <View style={{ paddingHorizontal: spacing.lg, paddingTop: spacing.lg }}>
+        <Text style={typography.h1}>Workers</Text>
+      </View>
 
       <FlatList
         data={rows}
-        keyExtractor={(i) => i.id}
+        keyExtractor={(w) => String(w.id)}
         renderItem={renderItem}
-        ItemSeparatorComponent={() => <View style={{ height: spacing.md }} />}
-        ListEmptyComponent={
-          <Card>
-            <Text style={typography.body}>No workers yet. Tap the + to add your first worker.</Text>
-          </Card>
+        ItemSeparatorComponent={() => <View style={{ height: spacing.lg }} />}
+        contentContainerStyle={{
+          paddingHorizontal: spacing.lg,
+          paddingTop: spacing.md,
+          paddingBottom: spacing['2xl'], 
+        }}
+        refreshControl={
+          <RefreshControl refreshing={loading} onRefresh={refresh} />
         }
-        refreshing={loading}
-        onRefresh={load}
-        contentContainerStyle={{ paddingBottom: 96 }} // room for FAB
+        ListEmptyComponent={
+          !loading ? (
+            <Text style={[typography.small, { textAlign: 'center', marginTop: spacing.xl }]}>
+              No workers yet. Tap the + button to add one.
+            </Text>
+          ) : null
+        }
       />
 
-      {/* Floating Action Button */}
       <Pressable
         accessibilityRole="button"
         accessibilityLabel="Add worker"
         onPress={() => navigation.navigate('AddWorker')}
         style={({ pressed }) => [
           styles.fab,
-          { opacity: pressed ? 0.9 : 1 },
+          pressed && { opacity: 0.92 },
         ]}
       >
         <Text style={styles.fabPlus}>+</Text>
@@ -81,28 +106,33 @@ export default function WorkersListScreen({ navigation }: any) {
 }
 
 const styles = StyleSheet.create({
+  card: {
+    borderWidth: 1,
+    borderColor: '#eee',
+    borderRadius: 16,
+  },
   fab: {
     position: 'absolute',
     right: spacing.lg,
-    bottom: spacing.lg + 8, // lift above bottom safe area
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: colors.brand, // UAE green
+    bottom: spacing.lg + 8, 
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: colors.brand, 
     alignItems: 'center',
     justifyContent: 'center',
-    // subtle shadow
+    zIndex: 1000,
+    elevation: 8,
     shadowColor: '#000',
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 6,
+    shadowOpacity: 0.25,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 6 },
   },
   fabPlus: {
     color: '#fff',
-    fontSize: 28,
-    lineHeight: 28,
-    fontWeight: '700',
+    fontSize: 30,
+    lineHeight: 30,
+    fontWeight: '800',
     marginTop: -2,
   },
 });

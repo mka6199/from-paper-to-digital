@@ -5,7 +5,7 @@ import { colors, spacing, typography } from '../../theme/tokens';
 type Props = {
   name: string;
   role?: string;
-  avatarUrl?: string | null; // optional; only used if provided
+  avatarUrl?: string | null;
   right?: React.ReactNode;
   onPress?: () => void;
 };
@@ -24,7 +24,6 @@ export default function WorkerListItem({ name, role, avatarUrl, right, onPress }
   return (
     <Pressable onPress={onPress} style={styles.row}>
       {avatarUrl ? (
-        // If you later add an Image, place it here.
         <View style={[styles.badge, { backgroundColor: colors.card }]} />
       ) : (
         <View style={styles.badge}>

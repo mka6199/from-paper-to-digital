@@ -1,4 +1,3 @@
-// src/screens/workers/WorkerProfileScreen.tsx
 import React from 'react';
 import { Text, View } from 'react-native';
 import Screen from '../../components/layout/Screen';
@@ -39,7 +38,6 @@ const initials = (name?: string) =>
     .join('');
 
 export default function WorkerProfileScreen({ navigation }: any) {
-  // ✅ Hooks must be INSIDE the function component and not in conditionals
   const route = useRoute<any>();
   const { id, worker: initialWorker } = (route?.params ?? {}) as {
     id: string;
@@ -50,7 +48,6 @@ export default function WorkerProfileScreen({ navigation }: any) {
     initialWorker ? normalize(initialWorker) : null
   );
 
-  // 🔁 Refresh data every time this screen gains focus
   useFocusEffect(
     React.useCallback(() => {
       let cancelled = false;
@@ -68,11 +65,9 @@ export default function WorkerProfileScreen({ navigation }: any) {
     }, [id])
   );
 
-  // ⚡ Instant update when Edit screen sends new params (optimistic update)
   React.useEffect(() => {
-    if ((route?.params as any)?.worker) {
-      setW(normalize((route.params as any).worker));
-    }
+    const p: any = route?.params;
+    if (p?.worker) setW(normalize(p.worker));
   }, [route?.params]);
 
   const monthly = getMonthlySalary(w);
@@ -83,8 +78,7 @@ export default function WorkerProfileScreen({ navigation }: any) {
       <AppHeader title="Worker Profile" onBack={() => navigation.goBack()} />
 
       <Card>
-        <View style={{ alignItems: 'center', gap: spacing.md }}>
-          {/* initials badge only */}
+        <View style={{ alignItems: 'center', gap: spacing.md, padding: spacing.lg }}>
           <View
             style={{
               width: 96,
@@ -108,23 +102,28 @@ export default function WorkerProfileScreen({ navigation }: any) {
         </View>
       </Card>
 
-      <View style={{ gap: 12, marginTop: 16 }}>
+      <View style={{ gap: spacing.md, marginTop: spacing.lg, paddingHorizontal: spacing.lg }}>
         <Button
           label="Pay Salary"
-          tone="green"
-          onPress={() => navigation.navigate('PaySalary', { id })}
+          onPress={() => navigation.navigate('PaySalary', { workerId: id, id })}
+          fullWidth
         />
         <Button
           label="View History"
           variant="soft"
-          tone="green"
-          onPress={() => navigation.navigate('WorkerHistoryList', { workerId: id, workerName: w?.name ?? '' })}
+          onPress={() =>
+            navigation.navigate('PaymentHistory', {
+              workerId: id,
+              workerName: w?.name ?? '',
+            })
+          }
+          fullWidth
         />
         <Button
           label="Edit Info"
           variant="outline"
-          tone="green"
-          onPress={() => navigation.navigate('EditWorker', { id })}
+          onPress={() => navigation.navigate('EditWorker', { workerId: id, id })}
+          fullWidth
         />
       </View>
     </Screen>

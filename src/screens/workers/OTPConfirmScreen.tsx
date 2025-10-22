@@ -7,35 +7,57 @@ import Button from '../../components/primitives/Button';
 import { addPayment } from '../../services/payments';
 
 export default function OTPConfirmScreen({ route, navigation }: any) {
-  const { workerId, workerName, amount, bonus, method, month } = route.params || {};
+  const {
+    workerId,
+    workerName,
+    amount,
+    bonus,
+    method,
+    month,
+  } = route.params || {};
   const [otp, setOtp] = useState('');
   const [busy, setBusy] = useState(false);
 
+  function ensureYYYYMM(d: any) {
+    if (typeof d === 'string' && /^\d{4}-\d{2}$/.test(d)) return d;
+    const now = new Date();
+    const y = now.getFullYear();
+    const m = `${now.getMonth() + 1}`.padStart(2, '0');
+    return `${y}-${m}`;
+    }
+
   async function onConfirm() {
     try {
-      if (!otp || String(otp).length < 4) { Alert.alert('Enter the 4-digit OTP'); return; }
+      if (!otp || String(otp).length < 4) {
+        Alert.alert('Enter the 4-digit OTP');
+        return;
+      }
+      if (!workerId) {
+        Alert.alert('Missing worker id');
+        return;
+      }
+
       setBusy(true);
-
-      const payload: any = {
-        workerId,
-        workerName,                         // <-- denormalized
+      const id = await addPayment({
+        workerId: String(workerId),
+        workerName: workerName ?? '',
         amount: Number(amount || 0),
-        month: month || new Date().toISOString().slice(0, 7),
-        method: method === 'cash' ? 'cash' : 'bank',
-      };
-      const b = Number(bonus);
-      if (!Number.isNaN(b) && b > 0) payload.bonus = b;
+        bonus: Number(bonus || 0),
+        method: method || 'bank',
+        month: ensureYYYYMM(month),
+      });
 
-      await addPayment(payload);
 
       navigation.replace('PaymentConfirmation', {
+        paymentId: id,
         workerId,
         workerName,
-        amount: payload.amount,
-        method: payload.method,
+        amount,
+        bonus,
+        method,
+        month: ensureYYYYMM(month),
       });
     } catch (e: any) {
-      console.error(e);
       Alert.alert('Payment failed', e?.message ?? 'Please try again.');
     } finally {
       setBusy(false);
@@ -45,8 +67,18 @@ export default function OTPConfirmScreen({ route, navigation }: any) {
   return (
     <Screen scroll padded>
       <AppHeader title="Enter OTP" onBack={() => navigation.goBack()} />
-      <TextField label="One-time code" value={otp} onChangeText={setOtp} keyboardType="number-pad" />
-      <Button label={busy ? 'Processing…' : 'Confirm Payment'} onPress={onConfirm} disabled={busy} fullWidth />
+      <TextField
+        label="One-time code"
+        value={otp}
+        onChangeText={setOtp}
+        keyboardType="number-pad"
+      />
+      <Button
+        label={busy ? 'Processing…' : 'Confirm Payment'}
+        onPress={onConfirm}
+        disabled={busy}
+        fullWidth
+      />
     </Screen>
   );
 }

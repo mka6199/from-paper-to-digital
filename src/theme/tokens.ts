@@ -16,7 +16,12 @@ export const colors = {
 
   success: '#15803D',
   warn: '#92400E',
-
+  label: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#333',
+  },
+  
   focus: '#2563EB',
 };
 

@@ -3,13 +3,13 @@ import { ActivityIndicator, Pressable, Text, View, StyleSheet, ViewStyle } from 
 import { colors, radii, spacing } from '../../theme/tokens';
 
 type Variant = 'solid' | 'outline' | 'soft';
-type Tone = 'green' | 'gold' | 'danger';
+type Tone = 'green' | 'warn' | 'gold' | 'danger'; 
 
 type Props = {
   label: string;
   onPress?: () => void;
-  variant?: Variant;   // default: 'solid'
-  tone?: Tone;         // default: 'green'
+  variant?: Variant;
+  tone?: Tone;
   fullWidth?: boolean;
   disabled?: boolean;
   loading?: boolean;
@@ -35,16 +35,15 @@ export default function Button({
   iconRight,
   accessibilityLabel,
 }: Props) {
-  // tone colors
   const main =
-    tone === 'gold'   ? colors.gold   :
     tone === 'danger' ? colors.danger :
-                        colors.brand; // green
+    tone === 'warn' || tone === 'gold' ? colors.warn :
+    colors.brand; 
 
   const fgSolid = '#fff';
   const fgOutline = main;
   const bgSolid = main;
-  const bgSoft = `${main}22`; // translucent
+  const bgSoft = `${main}22`;
 
   let backgroundColor = bgSolid;
   let textColor = fgSolid;
