@@ -17,12 +17,8 @@ function parseYMD(s: string): Date | null {
 
 export default function CustomRangeScreen({ route, navigation }: any) {
   const p = (route?.params ?? {}) as { startISO?: string; endISO?: string };
-  const [startTxt, setStartTxt] = React.useState(
-    p.startISO ? p.startISO.slice(0, 10) : ''
-  );
-  const [endTxt, setEndTxt] = React.useState(
-    p.endISO ? p.endISO.slice(0, 10) : ''
-  );
+  const [startTxt, setStartTxt] = React.useState(p.startISO ? p.startISO.slice(0, 10) : '');
+  const [endTxt, setEndTxt] = React.useState(p.endISO ? p.endISO.slice(0, 10) : '');
 
   function onApply() {
     const s = parseYMD(startTxt);
@@ -45,8 +41,18 @@ export default function CustomRangeScreen({ route, navigation }: any) {
       <Card>
         <View style={{ gap: spacing.md }}>
           <Text style={typography.small}>Enter dates as YYYY-MM-DD</Text>
-          <TextField label="Start date" value={startTxt} onChangeText={setStartTxt} placeholder="e.g., 2025-07-01" />
-          <TextField label="End date" value={endTxt} onChangeText={setEndTxt} placeholder="e.g., 2025-10-22" />
+          <TextField
+            label="Start date"
+            value={startTxt}
+            onChangeText={setStartTxt}
+            placeholder="e.g., 2025-07-01"
+          />
+          <TextField
+            label="End date"
+            value={endTxt}
+            onChangeText={setEndTxt}
+            placeholder="e.g., 2025-10-22"
+          />
         </View>
       </Card>
 

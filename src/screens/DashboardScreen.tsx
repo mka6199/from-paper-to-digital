@@ -1,28 +1,35 @@
 import React from 'react';
-import { View, Text, StyleSheet, FlatList, Alert } from 'react-native';
+import { View, Text, StyleSheet, FlatList, Pressable } from 'react-native';
 import Screen from '../components/layout/Screen';
 import Card from '../components/primitives/Card';
 import Button from '../components/primitives/Button';
 import { colors, spacing, typography } from '../theme/tokens';
 import { AuthContext } from '../context/AuthProvider';
 import { subscribeMyWorkers, Worker } from '../services/workers';
-import {
-  Payment,
-  monthRange,
-  subscribeMyPaymentsInRange,
-} from '../services/payments';
-import { signOut } from '../../firebase';
+import { Payment, monthRange, subscribeMyPaymentsInRange } from '../services/payments';
+import { subscribeMyUnreadCount } from '../services/notifications';
+
+const money = (n: number) => `${Math.round(n).toLocaleString()} AED`;
+const addDays = (d: Date, days: number) => {
+  const x = new Date(d);
+  x.setDate(x.getDate() + days);
+  return x;
+};
 
 type Totals = {
   workers: number;
   dueNow: number;
   dueThisMonth: number;
   paidThisMonth: number;
-  outstanding: number;
 };
 
 export default function DashboardScreen({ navigation }: any) {
   const { profile } = React.useContext(AuthContext);
+
+  const displayName =
+    (profile?.firstName
+      ? `${profile.firstName}${profile?.lastName ? ' ' + profile.lastName : ''}`
+      : '') || profile?.email || 'User';
 
   const [workers, setWorkers] = React.useState<Worker[]>([]);
   const [payments, setPayments] = React.useState<Payment[]>([]);
@@ -31,11 +38,20 @@ export default function DashboardScreen({ navigation }: any) {
     dueNow: 0,
     dueThisMonth: 0,
     paidThisMonth: 0,
-    outstanding: 0,
   });
-
   const [gotWorkers, setGotWorkers] = React.useState(false);
   const [gotPayments, setGotPayments] = React.useState(false);
+  const [unread, setUnread] = React.useState(0);
+
+  React.useEffect(() => {
+    let u: (() => void) | null = null;
+    try {
+      u = subscribeMyUnreadCount(setUnread);
+    } catch {}
+    return () => {
+      if (u) u();
+    };
+  }, []);
 
   React.useEffect(() => {
     let unsub: (() => void) | null = null;
@@ -48,7 +64,9 @@ export default function DashboardScreen({ navigation }: any) {
       console.warn('Dashboard subscribeMyWorkers failed:', e);
       setGotWorkers(true);
     }
-    return () => { if (unsub) unsub(); };
+    return () => {
+      if (unsub) unsub();
+    };
   }, []);
 
   React.useEffect(() => {
@@ -63,82 +81,57 @@ export default function DashboardScreen({ navigation }: any) {
       console.warn('Dashboard subscribeMyPaymentsInRange failed:', e);
       setGotPayments(true);
     }
-    return () => { if (unsub) unsub(); };
+    return () => {
+      if (unsub) unsub();
+    };
   }, []);
 
   React.useEffect(() => {
-    const nowSec = Math.floor(Date.now() / 1000);
-    const { start, end } = monthRange();
-    const startSec = Math.floor(start.getTime() / 1000);
-    const endSec = Math.floor(end.getTime() / 1000);
+    const now = new Date();
+    const nowSec = Math.floor(now.getTime() / 1000);
+    const { start: mStart, end: mEnd } = monthRange();
+    const mStartSec = Math.floor(mStart.getTime() / 1000);
+    const mEndSec = Math.floor(mEnd.getTime() / 1000);
 
     const salaryOf = (w: Worker) =>
       Number(w.monthlySalaryAED ?? w.baseSalary ?? 0) || 0;
 
+    const paidInCurrentCycle = (w: Worker) => {
+      const cycleEnd = (w.nextDueAt?.toDate?.() as Date | undefined) ?? now;
+      const cycleStart = addDays(new Date(cycleEnd), -31);
+      const created = w.createdAt?.toDate?.() as Date | undefined;
+      const start = created && created > cycleStart ? created : cycleStart;
+
+      return payments.reduce((sum, p) => {
+        if (p.workerId !== w.id) return sum;
+        const t = p.paidAt?.toDate?.();
+        if (!t) return sum;
+        return t >= start && t <= cycleEnd
+          ? sum + Number(p.amount ?? 0) + Number(p.bonus ?? 0)
+          : sum;
+      }, 0);
+    };
+
     const dueNow = workers.reduce((sum, w) => {
-      const t = (w.nextDueAt && w.nextDueAt.seconds) || 0;
-      return sum + (t > 0 && t <= nowSec ? salaryOf(w) : 0);
+      const dueTs = (w.nextDueAt?.seconds as number | undefined) ?? 0;
+      if (dueTs === 0 || dueTs > nowSec) return sum;
+      const remaining = Math.max(0, salaryOf(w) - paidInCurrentCycle(w));
+      return sum + remaining;
     }, 0);
 
     const dueThisMonth = workers.reduce((sum, w) => {
-      const t = (w.nextDueAt && w.nextDueAt.seconds) || 0;
-      return sum + (t >= startSec && t <= endSec ? salaryOf(w) : 0);
+      const t = (w.nextDueAt?.seconds as number | undefined) ?? 0;
+      if (t >= mStartSec && t <= mEndSec) return sum + salaryOf(w);
+      return sum;
     }, 0);
 
     const paidThisMonth = payments.reduce(
-      (sum, p) => sum + Number(p.amount ?? 0) + Number(p.bonus ?? 0),
+      (s, p) => s + Number(p.amount ?? 0) + Number(p.bonus ?? 0),
       0
     );
 
-    setTotals({
-      workers: workers.length,
-      dueNow,
-      dueThisMonth,
-      paidThisMonth,
-      outstanding: dueThisMonth,
-    });
+    setTotals({ workers: workers.length, dueNow, dueThisMonth, paidThisMonth });
   }, [workers, payments]);
-
-  const money = (n: number) => `${Math.round(n).toLocaleString()} AED`;
-
-  const renderPayment = ({ item }: { item: Payment }) => {
-    const when = item.paidAt?.toDate ? item.paidAt.toDate() : undefined;
-    const dateStr = when
-      ? `${when.getFullYear()}-${String(when.getMonth() + 1).padStart(2, '0')}-${String(
-          when.getDate()
-        ).padStart(2, '0')}`
-      : '—';
-    const total = Number(item.amount ?? 0) + Number(item.bonus ?? 0);
-
-    return (
-      <Card style={styles.rowCard}>
-        <View style={styles.row}>
-          <Text style={typography.body}>{dateStr}</Text>
-          <Text style={[typography.body, { fontWeight: '700' }]}>{total} AED</Text>
-        </View>
-        <Text style={[typography.small, { color: colors.subtext }]}>
-          Worker: {item.workerName ?? item.workerId} • Method: {item.method ?? '—'}
-        </Text>
-      </Card>
-    );
-  };
-
-  function onLogout() {
-    Alert.alert('Log out', 'Are you sure you want to log out?', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Log out',
-        style: 'destructive',
-        onPress: async () => {
-          try {
-            await signOut();
-          } catch (e: any) {
-            Alert.alert('Could not log out', e?.message ?? 'Please try again.');
-          }
-        },
-      },
-    ]);
-  }
 
   const Header = (
     <View style={{ paddingBottom: spacing.lg }}>
@@ -155,13 +148,28 @@ export default function DashboardScreen({ navigation }: any) {
       >
         <View style={{ flex: 1 }}>
           <Text style={[typography.h1, { marginBottom: 4 }]} numberOfLines={1}>
-            Welcome{profile?.email ? `, ${profile.email}` : ''} 👋
+            Welcome, {displayName} 👋
           </Text>
           <Text style={[typography.small, { color: colors.subtext }]}>
             Here’s your snapshot for this month.
           </Text>
         </View>
-        <Button label="Log out" variant="outline" tone="danger" onPress={onLogout} />
+
+        {/* Bell / Notifications */}
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => navigation.getParent()?.navigate('Notifications')}
+          style={{ paddingHorizontal: 12, paddingVertical: 8 }}
+        >
+          <Text style={{ fontSize: 22 }}>🔔</Text>
+          {unread > 0 && (
+            <View style={styles.badge}>
+              <Text style={styles.badgeText}>
+                {unread > 99 ? '99+' : String(unread)}
+              </Text>
+            </View>
+          )}
+        </Pressable>
       </View>
 
       <View style={{ paddingHorizontal: spacing.lg, gap: spacing.md }}>
@@ -178,7 +186,12 @@ export default function DashboardScreen({ navigation }: any) {
 
         <Card style={styles.statCard}>
           <Text style={styles.statLabel}>Due now</Text>
-          <Text style={[styles.statValue, { color: totals.dueNow > 0 ? colors.danger : colors.text }]}>
+          <Text
+            style={[
+              styles.statValue,
+              { color: totals.dueNow > 0 ? colors.danger : colors.text },
+            ]}
+          >
             {money(totals.dueNow)}
           </Text>
         </Card>
@@ -207,22 +220,12 @@ export default function DashboardScreen({ navigation }: any) {
             fullWidth
           />
         </Card>
-
-        <Card style={styles.statCard}>
-          <Text style={styles.statLabel}>Outstanding</Text>
-          <Text style={[styles.statValue, { color: totals.outstanding > 0 ? colors.danger : colors.text }]}>
-            {money(totals.outstanding)}
-          </Text>
-          <Button
-            label="Pay a worker"
-            onPress={() => navigation.navigate('Workers', { screen: 'WorkersList' })}
-            fullWidth
-          />
-        </Card>
       </View>
 
       <View style={{ paddingHorizontal: spacing.lg, marginTop: spacing.lg }}>
-        <Text style={[typography.h2, { marginBottom: spacing.sm }]}>Recent payments</Text>
+        <Text style={[typography.h2, { marginBottom: spacing.sm }]}>
+          Recent payments
+        </Text>
       </View>
     </View>
   );
@@ -234,11 +237,39 @@ export default function DashboardScreen({ navigation }: any) {
       <FlatList
         data={payments.slice(0, 20)}
         keyExtractor={(p) => String(p.id)}
-        renderItem={renderPayment}
+        renderItem={({ item }) => {
+          const when = item.paidAt?.toDate ? item.paidAt.toDate() : undefined;
+          const dateStr = when
+            ? `${when.getFullYear()}-${String(when.getMonth() + 1).padStart(
+                2,
+                '0'
+              )}-${String(when.getDate()).padStart(2, '0')}`
+            : '—';
+          const total = Number(item.amount ?? 0) + Number(item.bonus ?? 0);
+          return (
+            <Card style={styles.rowCard}>
+              <View style={styles.row}>
+                <Text style={typography.body}>{dateStr}</Text>
+                <Text style={[typography.body, { fontWeight: '700' }]}>
+                  {money(total)}
+                </Text>
+              </View>
+              <Text style={[typography.small, { color: colors.subtext }]}>
+                Worker: {item.workerName ?? item.workerId} • Method:{' '}
+                {item.method ?? '—'}
+              </Text>
+            </Card>
+          );
+        }}
         ListHeaderComponent={Header}
         ListEmptyComponent={
           !isLoading ? (
-            <Text style={[typography.small, { textAlign: 'center', color: colors.subtext }]}>
+            <Text
+              style={[
+                typography.small,
+                { textAlign: 'center', color: colors.subtext },
+              ]}
+            >
               No payments yet this month.
             </Text>
           ) : null
@@ -284,5 +315,22 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     marginBottom: 6,
+  },
+  badge: {
+    position: 'absolute',
+    right: 6,
+    top: 2,
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: colors.danger,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 4,
+  },
+  badgeText: {
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: '700',
   },
 });

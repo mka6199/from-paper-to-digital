@@ -19,20 +19,68 @@ import AdminGate from '../../components/admin/AdminGate';
 import { AuthContext } from '../../context/AuthProvider';
 
 const isEmail = (s: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(s).trim());
+const isPhone = (s: string) => /^[0-9()+\-.\s]{7,20}$/.test(String(s).trim());
+const isYMD  = (s: string) => /^\d{4}-\d{2}-\d{2}$/.test(String(s).trim());
 
 export default function AdminUsersScreen({ navigation }: any) {
-  const { profile, user } = React.useContext(AuthContext);
+  const { user } = React.useContext(AuthContext);
 
   const [rows, setRows] = React.useState<AdminUser[]>([]);
   const [editUid, setEditUid] = React.useState<string | null>(null);
-  const [editEmail, setEditEmail] = React.useState('');
+
+  const [firstName, setFirstName] = React.useState('');
+  const [lastName,  setLastName]  = React.useState('');
+  const [phone,     setPhone]     = React.useState('');
+  const [dobYMD,    setDobYMD]    = React.useState('');
+  const [email,     setEmail]     = React.useState('');
 
   React.useEffect(() => {
     const unsub = subscribeAllUsers(setRows);
     return () => unsub();
   }, []);
 
-  const onToggleRole = (u: AdminUser) => {
+  function beginEdit(u: AdminUser) {
+    setEditUid(u.uid);
+    setFirstName(String(u.firstName ?? ''));
+    setLastName (String(u.lastName  ?? ''));
+    setPhone    (String(u.phone     ?? ''));
+    setDobYMD   (String(u.dobYMD    ?? ''));
+    setEmail    (String(u.email     ?? ''));
+  }
+
+  async function saveEdit() {
+    if (!editUid) return;
+    if (!firstName.trim() || !lastName.trim()) {
+      Alert.alert('Invalid name', 'First and last name are required.');
+      return;
+    }
+    if (!isPhone(phone)) {
+      Alert.alert('Invalid phone', 'Enter a valid phone number.');
+      return;
+    }
+    if (dobYMD && !isYMD(dobYMD)) {
+      Alert.alert('Invalid DOB', 'Enter DOB as YYYY-MM-DD or leave blank.');
+      return;
+    }
+    if (!isEmail(email)) {
+      Alert.alert('Invalid email', 'Enter a valid email address.');
+      return;
+    }
+    try {
+      await updateUserDoc(editUid, {
+        firstName: firstName.trim(),
+        lastName : lastName.trim(),
+        phone    : phone.trim(),
+        dobYMD   : dobYMD.trim() || undefined,
+        email    : email.trim().toLowerCase(),
+      });
+      setEditUid(null);
+    } catch (e: any) {
+      Alert.alert('Failed to update', e?.message ?? 'Please try again.');
+    }
+  }
+
+  function onToggleRole(u: AdminUser) {
     if (u.uid === user?.uid) {
       Alert.alert('Not allowed', 'You cannot change your own role.');
       return;
@@ -42,39 +90,16 @@ export default function AdminUsersScreen({ navigation }: any) {
       { text: 'Cancel', style: 'cancel' },
       { text: 'Change', style: 'destructive', onPress: () => setUserRole(u.uid, next) },
     ]);
-  };
+  }
 
-  const onToggleActive = (u: AdminUser, value: boolean) => {
+  function onToggleActive(u: AdminUser, value: boolean) {
     if (u.uid === user?.uid) {
       Alert.alert('Not allowed', 'You cannot deactivate yourself.');
       return;
     }
-    setUserActive(u.uid, value).catch((e) => Alert.alert('Error', e?.message ?? 'Failed'));
-  };
-
-  const startEdit = (u: AdminUser) => {
-    setEditUid(u.uid);
-    setEditEmail(u.email ?? '');
-  };
-
-  const saveEdit = async () => {
-    if (!editUid) return;
-    const email = editEmail.trim().toLowerCase();
-    if (!isEmail(email)) {
-      Alert.alert('Invalid email', 'Please enter a valid email address.');
-      return;
-    }
-    try {
-      await updateUserDoc(editUid, { email });
-      setEditUid(null);
-      setEditEmail('');
-    } catch (e: any) {
-      Alert.alert('Failed to update', e?.message ?? 'Please try again.');
-    }
-  };
-
-  async function onLogout() {
-    try { await signOut(); } catch {}
+    setUserActive(u.uid, value).catch((e) =>
+      Alert.alert('Error', e?.message ?? 'Failed to update active flag')
+    );
   }
 
   function onRemoveUser(u: AdminUser) {
@@ -106,6 +131,10 @@ export default function AdminUsersScreen({ navigation }: any) {
     );
   }
 
+  async function onLogout() {
+    try { await signOut(); } catch {}
+  }
+
   const header = (
     <View style={{ paddingHorizontal: spacing.lg }}>
       <AppHeader title="Manage Users" onBack={() => navigation.goBack()} />
@@ -119,14 +148,31 @@ export default function AdminUsersScreen({ navigation }: any) {
     const editing = editUid === item.uid;
     return (
       <Card style={styles.row}>
-        <View style={{ flex: 1, paddingRight: spacing.md }}>
+        <View style={{ flex: 1, paddingRight: spacing.md, gap: spacing.xs }}>
           {editing ? (
-            <TextField label="Email" value={editEmail} onChangeText={setEditEmail} autoCapitalize="none" />
+            <>
+              <TextField label="First name" value={firstName} onChangeText={setFirstName} />
+              <TextField label="Last name"  value={lastName}  onChangeText={setLastName} />
+              <TextField label="Phone"      value={phone}     onChangeText={setPhone} keyboardType="phone-pad" />
+              <TextField label="DOB (YYYY-MM-DD)" value={dobYMD} onChangeText={setDobYMD} placeholder="e.g., 2001-05-12" />
+              <TextField label="Email" value={email} onChangeText={setEmail} autoCapitalize="none" />
+            </>
           ) : (
             <>
-              <Text style={typography.body}>{item.email || item.uid}</Text>
+              <Text style={typography.body}>
+                {(item.firstName || '') + ' ' + (item.lastName || '')}
+              </Text>
+              <Text style={[typography.small, { color: colors.subtext }]} numberOfLines={1}>
+                {item.email || '—'}
+              </Text>
               <Text style={[typography.small, { color: colors.subtext }]}>
-                role: {item.role} • active: {item.isActive === false ? 'no' : 'yes'}
+                Phone: {item.phone || '—'}
+              </Text>
+              <Text style={[typography.small, { color: colors.subtext }]}>
+                DOB: {item.dobYMD || '—'}
+              </Text>
+              <Text style={[typography.small, { color: colors.subtext }]}>
+                Role: {item.role} • Active: {item.isActive === false ? 'no' : 'yes'}
               </Text>
             </>
           )}
@@ -152,13 +198,8 @@ export default function AdminUsersScreen({ navigation }: any) {
                   onValueChange={(v) => onToggleActive(item, v)}
                 />
               </View>
-              <Button label="Edit" variant="soft" onPress={() => startEdit(item)} />
-              <Button
-                label="Remove"
-                variant="outline"
-                tone="danger"
-                onPress={() => onRemoveUser(item)}
-              />
+              <Button label="Edit" variant="soft" onPress={() => beginEdit(item)} />
+              <Button label="Remove" variant="outline" tone="danger" onPress={() => onRemoveUser(item)} />
             </>
           )}
         </View>
@@ -187,6 +228,6 @@ const styles = StyleSheet.create({
   row: {
     padding: spacing.lg,
     borderWidth: 1, borderColor: '#eee', borderRadius: 16, backgroundColor: '#fff',
-    flexDirection: 'row', alignItems: 'center', gap: spacing.md,
+    flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md,
   },
 });

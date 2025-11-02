@@ -7,6 +7,7 @@ import {
   View,
   RefreshControl,
 } from 'react-native';
+import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import Screen from '../../components/layout/Screen';
 import AppHeader from '../../components/layout/AppHeader';
 import Card from '../../components/primitives/Card';
@@ -18,6 +19,7 @@ import { useFocusEffect } from '@react-navigation/native';
 export default function WorkersListScreen({ navigation }: any) {
   const [rows, setRows] = React.useState<Worker[]>([]);
   const [loading, setLoading] = React.useState(false);
+  const tabBarHeight = useBottomTabBarHeight?.() ?? 0;
 
   useFocusEffect(
     React.useCallback(() => {
@@ -76,7 +78,7 @@ export default function WorkersListScreen({ navigation }: any) {
         contentContainerStyle={{
           paddingHorizontal: spacing.lg,
           paddingTop: spacing.md,
-          paddingBottom: spacing['2xl'], 
+          paddingBottom: spacing['2xl'] + 80, // extra space for FAB
         }}
         refreshControl={
           <RefreshControl refreshing={loading} onRefresh={refresh} />
@@ -88,19 +90,24 @@ export default function WorkersListScreen({ navigation }: any) {
             </Text>
           ) : null
         }
+        showsVerticalScrollIndicator={false}
       />
 
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel="Add worker"
-        onPress={() => navigation.navigate('AddWorker')}
-        style={({ pressed }) => [
-          styles.fab,
-          pressed && { opacity: 0.92 },
-        ]}
-      >
-        <Text style={styles.fabPlus}>+</Text>
-      </Pressable>
+     
+      <View pointerEvents="box-none" style={StyleSheet.absoluteFill}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Add worker"
+          onPress={() => navigation.navigate('AddWorker')}
+          style={({ pressed }) => [
+            styles.fab,
+            { bottom: tabBarHeight + spacing.lg }, 
+            pressed && { opacity: 0.92 },
+          ]}
+        >
+          <Text style={styles.fabPlus}>+</Text>
+        </Pressable>
+      </View>
     </Screen>
   );
 }
@@ -114,14 +121,13 @@ const styles = StyleSheet.create({
   fab: {
     position: 'absolute',
     right: spacing.lg,
-    bottom: spacing.lg + 8, 
+
     width: 64,
     height: 64,
     borderRadius: 32,
-    backgroundColor: colors.brand, 
+    backgroundColor: colors.brand,
     alignItems: 'center',
     justifyContent: 'center',
-    zIndex: 1000,
     elevation: 8,
     shadowColor: '#000',
     shadowOpacity: 0.25,

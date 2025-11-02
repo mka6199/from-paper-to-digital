@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, Text, FlatList, StyleSheet, Pressable } from 'react-native';
+import { useFocusEffect, useRoute } from '@react-navigation/native';
 import Screen from '../../components/layout/Screen';
 import AppHeader from '../../components/layout/AppHeader';
 import Card from '../../components/primitives/Card';
@@ -11,7 +12,6 @@ import {
   subscribeMyPaymentsInRange,
   rangeLast3Months,
   rangeThisYear,
-  monthRange,
 } from '../../services/payments';
 
 type RangeKey = 'last3' | 'thisYear' | 'custom';
@@ -26,10 +26,11 @@ function ymd(d: Date) {
 }
 
 export default function HistoryHomeScreen({ navigation, route }: any) {
-  const deep = (route?.params ?? {}) as { monthStart?: string; monthEnd?: string };
-  const initialRange: { start: Date; end: Date; key: RangeKey } = deep.monthStart && deep.monthEnd
-    ? { start: new Date(deep.monthStart), end: new Date(deep.monthEnd), key: 'custom' }
-    : { ...rangeLast3Months(), key: 'last3' };
+  const deep = (route?.params ?? {}) as { monthStart?: string; monthEnd?: string; workerId?: string };
+  const initialRange: { start: Date; end: Date; key: RangeKey } =
+    deep.monthStart && deep.monthEnd
+      ? { start: new Date(deep.monthStart), end: new Date(deep.monthEnd), key: 'custom' }
+      : { ...rangeLast3Months(), key: 'last3' };
 
   const [rangeKey, setRangeKey] = React.useState<RangeKey>(initialRange.key);
   const [start, setStart] = React.useState<Date>(initialRange.start);
@@ -40,14 +41,29 @@ export default function HistoryHomeScreen({ navigation, route }: any) {
 
   const [workerQuery, setWorkerQuery] = React.useState('');
 
+  // 🔒 Guard: if we arrive here with any lingering worker-scoped params, clear them.
+  const routeObj = useRoute<any>();
+  useFocusEffect(
+    React.useCallback(() => {
+      const p = (routeObj?.params ?? {}) as any;
+      if (p?.workerId || p?.scoped) {
+        // clear params so History home is global again
+        navigation.setParams({});
+      }
+    }, [navigation, routeObj?.params])
+  );
+
   React.useEffect(() => {
     if (rangeKey === 'last3') {
       const r = rangeLast3Months();
-      setStart(r.start); setEnd(r.end);
+      setStart(r.start);
+      setEnd(r.end);
     } else if (rangeKey === 'thisYear') {
       const r = rangeThisYear();
-      setStart(r.start); setEnd(r.end);
+      setStart(r.start);
+      setEnd(r.end);
     }
+    // custom range is handled via CustomRange screen
   }, [rangeKey]);
 
   React.useEffect(() => {
@@ -61,7 +77,9 @@ export default function HistoryHomeScreen({ navigation, route }: any) {
       console.warn('History subscribe failed:', e);
       setReady(true);
     }
-    return () => { if (unsub) unsub(); };
+    return () => {
+      if (unsub) unsub();
+    };
   }, [start.getTime(), end.getTime()]);
 
   const filtered = React.useMemo(() => {
@@ -102,10 +120,7 @@ export default function HistoryHomeScreen({ navigation, route }: any) {
             <Pressable
               key={k}
               onPress={() => setRangeKey(k)}
-              style={[
-                styles.segmentBtn,
-                rangeKey === k && styles.segmentBtnActive,
-              ]}
+              style={[styles.segmentBtn, rangeKey === k && styles.segmentBtnActive]}
             >
               <Text
                 style={[
@@ -186,7 +201,10 @@ export default function HistoryHomeScreen({ navigation, route }: any) {
     const p: Payment = item.payload;
     const d = p.paidAt?.toDate ? p.paidAt.toDate() : null;
     const line = d
-      ? `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`
+      ? `${d.getHours().toString().padStart(2, '0')}:${d
+          .getMinutes()
+          .toString()
+          .padStart(2, '0')}`
       : '—';
     const amount = Number(p.amount ?? 0) + Number(p.bonus ?? 0);
 

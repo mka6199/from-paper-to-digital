@@ -33,7 +33,9 @@ export default function MonthlyHistoryScreen({ route, navigation }: any) {
       console.warn('MonthlyHistory subscribe failed:', e);
       setReady(true);
     }
-    return () => { if (unsub) unsub(); };
+    return () => {
+      if (unsub) unsub();
+    };
   }, [start.getTime(), end.getTime()]);
 
   const total = rows.reduce(

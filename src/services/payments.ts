@@ -14,6 +14,7 @@ import {
   updateDoc,
   where,
 } from 'firebase/firestore';
+import { Worker, getWorker, getWorkerCycleWindow, advanceWorkerDue } from './workers';
 
 export const monthKey = (d: Date = new Date()) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
@@ -45,24 +46,23 @@ export type Payment = {
   amount: number;
   bonus?: number;
   method?: 'cash' | 'bank' | 'other';
-  month?: string;
-  paidAt?: Timestamp;
+  month?: string;            
+  paidAt?: Timestamp;         
   note?: string;
   createdAt?: Timestamp;
   updatedAt?: Timestamp;
 };
 
-const col = collection(db, 'payments');
+const COL = collection(db, 'payments');
 
-export async function addPayment(
+export async function addPaymentRaw(
   p: Omit<Payment, 'id' | 'ownerUid' | 'createdAt' | 'updatedAt' | 'paidAt' | 'month'> & {
     month?: string;
   }
 ) {
   await ensureAuth();
   const uid = auth.currentUser!.uid;
-
-  const ref = await addDoc(col, {
+  const ref = await addDoc(COL, {
     ...p,
     ownerUid: uid,
     month: p.month ?? monthKey(new Date()),
@@ -73,6 +73,9 @@ export async function addPayment(
   return ref.id;
 }
 
+export const addPayment = addPaymentRaw;
+
+
 export async function recordPaymentAndAdvanceDue(params: {
   workerId: string;
   workerName?: string;
@@ -82,28 +85,53 @@ export async function recordPaymentAndAdvanceDue(params: {
   note?: string;
   month?: string;
 }) {
-  const id = await addPayment({
+  await ensureAuth();
+  const uid = auth.currentUser!.uid;
+
+  const payId = await addPaymentRaw({
     workerId: params.workerId,
     workerName: params.workerName ?? '',
     amount: Number(params.amount || 0),
     bonus: Number(params.bonus || 0),
     method: params.method ?? 'bank',
     note: params.note ?? '',
-    month: params.month,
+    month: params.month ?? monthKey(new Date()),
   });
 
   try {
-    const next = new Date();
-    next.setDate(next.getDate() + 31);
-    await updateDoc(doc(db, 'workers', params.workerId), {
-      nextDueAt: Timestamp.fromDate(next),
-      updatedAt: serverTimestamp(),
-    });
+    const w = (await getWorker(params.workerId)) as Worker | null;
+    if (!w) return payId;
+
+    const salary = Number(w.monthlySalaryAED ?? w.baseSalary ?? 0) || 0;
+    if (salary <= 0) return payId;
+
+    const { start, end } = getWorkerCycleWindow(w);
+    const startTs = Timestamp.fromDate(start);
+    const endTs = Timestamp.fromDate(end);
+
+    const qy = query(
+      COL,
+      where('ownerUid', '==', uid),
+      where('workerId', '==', params.workerId),
+      where('paidAt', '>=', startTs),
+      where('paidAt', '<=', endTs)
+    );
+    const snap = await getDocs(qy);
+
+    const totalThisCycle = snap.docs.reduce((sum, d) => {
+      const p = d.data() as any;
+      return sum + Number(p.amount ?? 0) + Number(p.bonus ?? 0);
+    }, 0);
+
+    if (totalThisCycle >= salary) {
+     
+      await advanceWorkerDue(params.workerId, end);
+    }
   } catch {
    
   }
 
-  return id;
+  return payId;
 }
 
 export async function updatePayment(id: string, patch: Partial<Payment>) {
@@ -126,12 +154,11 @@ export async function getPayment(id: string): Promise<Payment | null> {
   return { id: snap.id, ...(snap.data() as any) } as Payment;
 }
 
-
 export function subscribeMyRecentPayments(cb: (rows: Payment[]) => void): () => void {
   const uid = auth.currentUser?.uid;
   if (!uid) throw new Error('Not signed in');
 
-  const qy = query(col, where('ownerUid', '==', uid), orderBy('paidAt', 'desc'));
+  const qy = query(COL, where('ownerUid', '==', uid), orderBy('paidAt', 'desc'));
   return onSnapshot(
     qy,
     (snap) => {
@@ -142,14 +169,11 @@ export function subscribeMyRecentPayments(cb: (rows: Payment[]) => void): () => 
   );
 }
 
-export function subscribeMyPaymentsInMonth(
-  month: string,
-  cb: (rows: Payment[]) => void
-): () => void {
+export function subscribeMyPaymentsInMonth(month: string, cb: (rows: Payment[]) => void): () => void {
   const uid = auth.currentUser?.uid;
   if (!uid) throw new Error('Not signed in');
 
-  const qy = query(col, where('ownerUid', '==', uid), where('month', '==', month));
+  const qy = query(COL, where('ownerUid', '==', uid), where('month', '==', month));
   return onSnapshot(
     qy,
     (snap) => {
@@ -165,6 +189,7 @@ export function subscribeMyPaymentsInMonth(
     (err) => console.warn('subscribeMyPaymentsInMonth error:', err)
   );
 }
+
 
 function monthsBetween(start: Date, end: Date): string[] {
   const a = new Date(Date.UTC(start.getFullYear(), start.getMonth(), 1));
@@ -202,7 +227,7 @@ function subscribeRangeViaMonths(
   };
 
   months.forEach((m) => {
-    const qy = query(col, where('ownerUid', '==', uid), where('month', '==', m));
+    const qy = query(COL, where('ownerUid', '==', uid), where('month', '==', m));
     const unsub = onSnapshot(
       qy,
       (snap) => {
@@ -219,7 +244,6 @@ function subscribeRangeViaMonths(
 
   return () => unsubs.forEach((u) => u());
 }
-
 
 export function subscribeMyPaymentsInRange(
   a: Date | { start: Date; end: Date },
@@ -245,7 +269,7 @@ export function subscribeMyPaymentsInRange(
 
   try {
     const qy = query(
-      col,
+      COL,
       where('ownerUid', '==', uid),
       where('paidAt', '>=', startTs),
       where('paidAt', '<=', endTs),
@@ -261,12 +285,16 @@ export function subscribeMyPaymentsInRange(
       (err) => {
         if ((err as any)?.code === 'failed-precondition') {
           console.warn('Payments index missing; using month fallback');
-          return subscribeRangeViaMonths(uid, start, end, cb);
+         
+          const off = subscribeRangeViaMonths(uid, start, end, cb);
+         
+          return off;
         }
         console.warn('subscribeMyPaymentsInRange error:', err);
       }
     );
-  } catch {
+  } catch (e) {
+   
     return subscribeRangeViaMonths(uid, start, end, cb);
   }
 }
@@ -277,7 +305,7 @@ export function subscribeWorkerPayments(workerId: string, cb: (rows: Payment[]) 
   if (!uid) throw new Error('Not signed in');
 
   const qy = query(
-    col,
+    COL,
     where('ownerUid', '==', uid),
     where('workerId', '==', workerId),
     orderBy('paidAt', 'desc')
@@ -297,7 +325,7 @@ export async function listMyPaymentsForMonth(month: string): Promise<Payment[]> 
   await ensureAuth();
   const uid = auth.currentUser!.uid;
   const qy = query(
-    col,
+    COL,
     where('ownerUid', '==', uid),
     where('month', '==', month),
     orderBy('paidAt', 'desc')
@@ -313,7 +341,7 @@ export async function listMyPaymentsForWorker(
   await ensureAuth();
   const uid = auth.currentUser!.uid;
 
-  let qy: any = query(col, where('ownerUid', '==', uid), where('workerId', '==', workerId));
+  let qy: any = query(COL, where('ownerUid', '==', uid), where('workerId', '==', workerId));
 
   if (opts?.month) {
     qy = query(qy, where('month', '==', opts.month));
@@ -328,5 +356,3 @@ export async function listMyPaymentsForWorker(
   const snap = await getDocs(qy);
   return snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) })) as Payment[];
 }
-
-export const listPaymentsByWorker = listMyPaymentsForWorker;

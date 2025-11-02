@@ -20,18 +20,26 @@ export type Worker = {
   name: string;
   role?: string;
   monthlySalaryAED?: number;
-  baseSalary?: number;            
+  baseSalary?: number;        
   avatarUrl?: string | null;
   ownerUid?: string | null;
 
-
-  nextDueAt?: any;             
-
+  nextDueAt?: any;           
   createdAt?: any;
   updatedAt?: any;
 };
 
 const COL = collection(db, 'workers');
+
+export function addDays(d: Date, days: number) {
+  const x = new Date(d);
+  x.setDate(x.getDate() + days);
+  return x;
+}
+
+function tsSeconds(t?: any) {
+  return t?.seconds ?? 0;
+}
 
 function toWorker(id: string, data: any): Worker {
   return {
@@ -48,14 +56,30 @@ function toWorker(id: string, data: any): Worker {
   };
 }
 
-function tsSeconds(t?: any) {
-  return t?.seconds ?? 0;
+
+export function getWorkerCycleWindow(w: Worker): { start: Date; end: Date } {
+  const end =
+    (w.nextDueAt?.toDate?.() as Date | undefined) ??
+    new Date();
+  const start = addDays(new Date(end), -31);
+  const created = w.createdAt?.toDate?.() as Date | undefined;
+  if (created && created > start) return { start: created, end };
+  return { start, end };
 }
 
-export function addDays(d: Date, days: number) {
-  const x = new Date(d);
-  x.setDate(x.getDate() + days);
-  return x;
+export async function getWorker(id: string): Promise<Worker | null> {
+  await ensureAuth();
+  const snap = await getDoc(doc(db, 'workers', id));
+  if (!snap.exists()) return null;
+  return toWorker(snap.id, snap.data());
+}
+
+export async function listWorkers(): Promise<Worker[]> {
+  await ensureAuth();
+  const uid = auth.currentUser!.uid;
+  const qy = query(COL, where('ownerUid', '==', uid), orderBy('createdAt', 'desc'));
+  const snap = await getDocs(qy);
+  return snap.docs.map((d) => toWorker(d.id, d.data()));
 }
 
 export function subscribeMyWorkers(cb: (workers: Worker[]) => void): () => void {
@@ -65,6 +89,7 @@ export function subscribeMyWorkers(cb: (workers: Worker[]) => void): () => void 
   const qy = query(COL, where('ownerUid', '==', uid));
   const unsub = onSnapshot(qy, (snap) => {
     const list = snap.docs.map((d) => toWorker(d.id, d.data()));
+
     const now = Timestamp.now();
     list.forEach(async (w) => {
       if (!w.nextDueAt && w.id) {
@@ -73,14 +98,16 @@ export function subscribeMyWorkers(cb: (workers: Worker[]) => void): () => void 
             nextDueAt: w.createdAt || now,
             updatedAt: serverTimestamp(),
           });
-        } catch {}
+        } catch {
+        }
       }
     });
+
     list.sort((a, b) => tsSeconds(b.createdAt) - tsSeconds(a.createdAt));
     cb(list);
   });
 
-  return () => unsub && unsub();
+  return () => unsub();
 }
 
 export function subscribeWorker(id: string, cb: (worker: Worker | null) => void): () => void {
@@ -89,7 +116,7 @@ export function subscribeWorker(id: string, cb: (worker: Worker | null) => void)
     if (!snap.exists()) return cb(null);
     cb(toWorker(snap.id, snap.data()));
   });
-  return () => unsub && unsub();
+  return () => unsub();
 }
 
 export function subscribeDueWorkers(before: Date, cb: (workers: Worker[]) => void): () => void {
@@ -104,26 +131,11 @@ export function subscribeDueWorkers(before: Date, cb: (workers: Worker[]) => voi
   });
 }
 
-export async function getWorker(id: string): Promise<Worker | null> {
-  await ensureAuth();
-  const snap = await getDoc(doc(db, 'workers', id));
-  if (!snap.exists()) return null;
-  return toWorker(snap.id, snap.data());
-}
-
-export async function listWorkers(): Promise<Worker[]> {
-  await ensureAuth();
-  const uid = auth.currentUser?.uid!;
-  const qy = query(COL, where('ownerUid', '==', uid), orderBy('createdAt', 'desc'));
-  const snap = await getDocs(qy);
-  return snap.docs.map((d) => toWorker(d.id, d.data()));
-}
-
 export async function addWorker(
   w: Omit<Worker, 'id' | 'createdAt' | 'updatedAt' | 'ownerUid' | 'nextDueAt'>
 ) {
   await ensureAuth();
-  const uid = auth.currentUser?.uid!;
+  const uid = auth.currentUser!.uid;
   const ref = await addDoc(COL, {
     ...w,
     ownerUid: uid,
@@ -147,12 +159,11 @@ export async function deleteWorker(id: string) {
   await deleteDoc(doc(db, 'workers', id));
 }
 
-export async function bumpWorkerNextDue(id: string, baseDate?: Date) {
+export async function advanceWorkerDue(id: string, baseDate?: Date) {
   await ensureAuth();
   const base = baseDate ? new Date(baseDate) : new Date();
-  const next = Timestamp.fromDate(addDays(base, 31));
   await updateDoc(doc(db, 'workers', id), {
-    nextDueAt: next,
+    nextDueAt: Timestamp.fromDate(addDays(base, 31)),
     updatedAt: serverTimestamp(),
   });
 }
