@@ -1,16 +1,18 @@
 import React from 'react';
 import { View, ViewProps } from 'react-native';
-import { colors, radii, spacing } from '../../theme/tokens';
+import { radii, spacing } from '../../theme/tokens';
+import { useTheme } from '../../theme/ThemeProvider';
 
 export default function Card({ style, ...rest }: ViewProps) {
+  const { colors } = useTheme();
   return (
     <View
       style={[
         {
-          backgroundColor: colors.card,
+          backgroundColor: colors.surface,
           borderRadius: radii.md,
           borderWidth: 1,
-          borderColor: colors.divider,
+          borderColor: colors.border,
           padding: spacing.md,
         },
         style,

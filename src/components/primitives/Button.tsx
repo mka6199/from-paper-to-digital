@@ -3,7 +3,7 @@ import { ActivityIndicator, Pressable, Text, View, StyleSheet, ViewStyle } from 
 import { colors, radii, spacing } from '../../theme/tokens';
 
 type Variant = 'solid' | 'outline' | 'soft';
-type Tone = 'green' | 'warn' | 'gold' | 'danger'; 
+type Tone = 'green' | 'warn' | 'gold' | 'danger';
 
 type Props = {
   label: string;
@@ -38,7 +38,7 @@ export default function Button({
   const main =
     tone === 'danger' ? colors.danger :
     tone === 'warn' || tone === 'gold' ? colors.warn :
-    colors.brand; 
+    colors.brand;
 
   const fgSolid = '#fff';
   const fgOutline = main;

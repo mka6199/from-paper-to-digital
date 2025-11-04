@@ -3,11 +3,14 @@ import { View, Text, StyleSheet, FlatList, Pressable } from 'react-native';
 import Screen from '../components/layout/Screen';
 import Card from '../components/primitives/Card';
 import Button from '../components/primitives/Button';
-import { colors, spacing, typography } from '../theme/tokens';
+import { colors as tokenColors, spacing, typography } from '../theme/tokens';
 import { AuthContext } from '../context/AuthProvider';
 import { subscribeMyWorkers, Worker } from '../services/workers';
 import { Payment, monthRange, subscribeMyPaymentsInRange } from '../services/payments';
 import { subscribeMyUnreadCount } from '../services/notifications';
+import DashboardKPIs from '../components/dashboard/DashboardKPIs';
+import { getMyProfile } from '../services/profile';
+import { useTheme } from '../theme/ThemeProvider';
 
 const money = (n: number) => `${Math.round(n).toLocaleString()} AED`;
 const addDays = (d: Date, days: number) => {
@@ -16,14 +19,32 @@ const addDays = (d: Date, days: number) => {
   return x;
 };
 
+function norm(v: any) {
+  return String(v ?? '').trim().toLowerCase();
+}
+function matchesPaymentToWorker(p: Payment, w: Worker): boolean {
+  if (p.workerId && w.id && String(p.workerId) === String(w.id)) return true;
+  const pid = norm(p.workerId);
+  const pname = norm(p.workerName);
+  const wid = norm(w.id);
+  const wname = norm(w.name);
+  if (pid && pid === wid) return true;
+  if (pname && pname === wname) return true;
+  if (pid && pid === wname) return true;
+  if (pname && pname === wid) return true;
+  return false;
+}
+
 type Totals = {
   workers: number;
-  dueNow: number;
   dueThisMonth: number;
   paidThisMonth: number;
+  hasDueSoon: boolean;
+  hasOverdue: boolean;
 };
 
 export default function DashboardScreen({ navigation }: any) {
+  const { colors } = useTheme();
   const { profile } = React.useContext(AuthContext);
 
   const displayName =
@@ -31,13 +52,27 @@ export default function DashboardScreen({ navigation }: any) {
       ? `${profile.firstName}${profile?.lastName ? ' ' + profile.lastName : ''}`
       : '') || profile?.email || 'User';
 
+  const [greetingOverride, setGreetingOverride] = React.useState<string>('');
+  React.useEffect(() => {
+    (async () => {
+      try {
+        const p = await getMyProfile();
+        const fn = (p as any)?.firstName?.trim?.() || '';
+        const ln = (p as any)?.lastName?.trim?.() || '';
+        const full = [fn, ln].filter(Boolean).join(' ');
+        if (full) setGreetingOverride(full);
+      } catch {}
+    })();
+  }, []);
+
   const [workers, setWorkers] = React.useState<Worker[]>([]);
   const [payments, setPayments] = React.useState<Payment[]>([]);
   const [totals, setTotals] = React.useState<Totals>({
     workers: 0,
-    dueNow: 0,
     dueThisMonth: 0,
     paidThisMonth: 0,
+    hasDueSoon: false,
+    hasOverdue: false,
   });
   const [gotWorkers, setGotWorkers] = React.useState(false);
   const [gotPayments, setGotPayments] = React.useState(false);
@@ -93,44 +128,47 @@ export default function DashboardScreen({ navigation }: any) {
     const mStartSec = Math.floor(mStart.getTime() / 1000);
     const mEndSec = Math.floor(mEnd.getTime() / 1000);
 
-    const salaryOf = (w: Worker) =>
-      Number(w.monthlySalaryAED ?? w.baseSalary ?? 0) || 0;
+    const salaryOf = (w: Worker) => Number(w.monthlySalaryAED ?? w.baseSalary ?? 0) || 0;
 
-    const paidInCurrentCycle = (w: Worker) => {
-      const cycleEnd = (w.nextDueAt?.toDate?.() as Date | undefined) ?? now;
-      const cycleStart = addDays(new Date(cycleEnd), -31);
-      const created = w.createdAt?.toDate?.() as Date | undefined;
-      const start = created && created > cycleStart ? created : cycleStart;
-
-      return payments.reduce((sum, p) => {
-        if (p.workerId !== w.id) return sum;
+    const paidInWindow = (w: Worker, start: Date, end: Date) =>
+      payments.reduce((sum, p) => {
+        if (!matchesPaymentToWorker(p, w)) return sum;
         const t = p.paidAt?.toDate?.();
         if (!t) return sum;
-        return t >= start && t <= cycleEnd
+        return t >= start && t <= end
           ? sum + Number(p.amount ?? 0) + Number(p.bonus ?? 0)
           : sum;
       }, 0);
-    };
 
-    const dueNow = workers.reduce((sum, w) => {
-      const dueTs = (w.nextDueAt?.seconds as number | undefined) ?? 0;
-      if (dueTs === 0 || dueTs > nowSec) return sum;
-      const remaining = Math.max(0, salaryOf(w) - paidInCurrentCycle(w));
-      return sum + remaining;
-    }, 0);
+    let dueThisMonth = 0;
+    let hasDueSoon = false;
+    let hasOverdue = false;
 
-    const dueThisMonth = workers.reduce((sum, w) => {
+    workers.forEach((w) => {
       const t = (w.nextDueAt?.seconds as number | undefined) ?? 0;
-      if (t >= mStartSec && t <= mEndSec) return sum + salaryOf(w);
-      return sum;
-    }, 0);
+      const inThisMonth = t >= mStartSec && t <= mEndSec;
+      if (!inThisMonth) return;
+
+      const remaining = Math.max(0, salaryOf(w) - paidInWindow(w, mStart, mEnd));
+      if (remaining <= 0) return;
+
+      dueThisMonth += remaining;
+      if (t <= nowSec) hasOverdue = true;
+      else hasDueSoon = true;
+    });
 
     const paidThisMonth = payments.reduce(
       (s, p) => s + Number(p.amount ?? 0) + Number(p.bonus ?? 0),
       0
     );
 
-    setTotals({ workers: workers.length, dueNow, dueThisMonth, paidThisMonth });
+    setTotals({
+      workers: workers.length,
+      dueThisMonth,
+      paidThisMonth,
+      hasDueSoon,
+      hasOverdue,
+    });
   }, [workers, payments]);
 
   const Header = (
@@ -147,15 +185,14 @@ export default function DashboardScreen({ navigation }: any) {
         }}
       >
         <View style={{ flex: 1 }}>
-          <Text style={[typography.h1, { marginBottom: 4 }]} numberOfLines={1}>
-            Welcome, {displayName} 👋
+          <Text style={[typography.h1, { marginBottom: 4, color: colors.text }]} numberOfLines={1}>
+            Welcome, {greetingOverride || displayName} 👋
           </Text>
           <Text style={[typography.small, { color: colors.subtext }]}>
             Here’s your snapshot for this month.
           </Text>
         </View>
 
-        {/* Bell / Notifications */}
         <Pressable
           accessibilityRole="button"
           onPress={() => navigation.getParent()?.navigate('Notifications')}
@@ -173,9 +210,9 @@ export default function DashboardScreen({ navigation }: any) {
       </View>
 
       <View style={{ paddingHorizontal: spacing.lg, gap: spacing.md }}>
-        <Card style={styles.statCard}>
-          <Text style={styles.statLabel}>Workers</Text>
-          <Text style={styles.statValue}>{totals.workers}</Text>
+        <Card style={[styles.statCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+          <Text style={[styles.statLabel, { color: colors.subtext }]}>Workers</Text>
+          <Text style={[styles.statValue, { color: colors.text }]}>{totals.workers}</Text>
           <Button
             label="View workers"
             variant="soft"
@@ -184,26 +221,25 @@ export default function DashboardScreen({ navigation }: any) {
           />
         </Card>
 
-        <Card style={styles.statCard}>
-          <Text style={styles.statLabel}>Due now</Text>
+        <Card style={[styles.statCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+          <Text style={[styles.statLabel, { color: colors.subtext }]}>Due this month</Text>
           <Text
             style={[
               styles.statValue,
-              { color: totals.dueNow > 0 ? colors.danger : colors.text },
+              totals.hasOverdue
+                ? { color: tokenColors.danger }
+                : totals.hasDueSoon
+                ? { color: '#b45309' }
+                : { color: colors.text },
             ]}
           >
-            {money(totals.dueNow)}
+            {money(totals.dueThisMonth)}
           </Text>
         </Card>
 
-        <Card style={styles.statCard}>
-          <Text style={styles.statLabel}>Due this month</Text>
-          <Text style={styles.statValue}>{money(totals.dueThisMonth)}</Text>
-        </Card>
-
-        <Card style={styles.statCard}>
-          <Text style={styles.statLabel}>Paid this month</Text>
-          <Text style={styles.statValue}>{money(totals.paidThisMonth)}</Text>
+        <Card style={[styles.statCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+          <Text style={[styles.statLabel, { color: colors.subtext }]}>Paid this month</Text>
+          <Text style={[styles.statValue, { color: colors.text }]}>{money(totals.paidThisMonth)}</Text>
           <Button
             label="View history"
             variant="outline"
@@ -223,7 +259,7 @@ export default function DashboardScreen({ navigation }: any) {
       </View>
 
       <View style={{ paddingHorizontal: spacing.lg, marginTop: spacing.lg }}>
-        <Text style={[typography.h2, { marginBottom: spacing.sm }]}>
+        <Text style={[typography.h2, { marginBottom: spacing.sm, color: colors.text }]}>
           Recent payments
         </Text>
       </View>
@@ -240,23 +276,21 @@ export default function DashboardScreen({ navigation }: any) {
         renderItem={({ item }) => {
           const when = item.paidAt?.toDate ? item.paidAt.toDate() : undefined;
           const dateStr = when
-            ? `${when.getFullYear()}-${String(when.getMonth() + 1).padStart(
-                2,
-                '0'
-              )}-${String(when.getDate()).padStart(2, '0')}`
+            ? `${when.getFullYear()}-${String(when.getMonth() + 1).padStart(2, '0')}-${String(
+                when.getDate()
+              ).padStart(2, '0')}`
             : '—';
           const total = Number(item.amount ?? 0) + Number(item.bonus ?? 0);
           return (
-            <Card style={styles.rowCard}>
+            <Card style={[styles.rowCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
               <View style={styles.row}>
-                <Text style={typography.body}>{dateStr}</Text>
-                <Text style={[typography.body, { fontWeight: '700' }]}>
+                <Text style={[typography.body, { color: colors.text }]}>{dateStr}</Text>
+                <Text style={[typography.body, { fontWeight: '700', color: colors.text }]}>
                   {money(total)}
                 </Text>
               </View>
               <Text style={[typography.small, { color: colors.subtext }]}>
-                Worker: {item.workerName ?? item.workerId} • Method:{' '}
-                {item.method ?? '—'}
+                Worker: {item.workerName ?? item.workerId} • Method: {item.method ?? '—'}
               </Text>
             </Card>
           );
@@ -298,7 +332,6 @@ const styles = StyleSheet.create({
   },
   statLabel: {
     ...typography.small,
-    color: colors.subtext,
   } as any,
   statValue: {
     ...typography.h1,
@@ -323,7 +356,7 @@ const styles = StyleSheet.create({
     minWidth: 18,
     height: 18,
     borderRadius: 9,
-    backgroundColor: colors.danger,
+    backgroundColor: tokenColors.danger,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 4,

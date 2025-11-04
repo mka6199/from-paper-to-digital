@@ -1,9 +1,15 @@
 import React from 'react';
-import { colors, spacing } from '../../theme/tokens';
 import {
-  KeyboardAvoidingView, Platform, ScrollView, StatusBar, View, ViewStyle,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  StatusBar,
+  View,
+  ViewStyle,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { spacing } from '../../theme/tokens';
+import { useTheme } from '../../theme/ThemeProvider';
 
 type Props = {
   children: React.ReactNode;
@@ -21,15 +27,23 @@ export default function Screen({
   padded = true,
   style,
   statusBarStyle = 'dark',
-  backgroundColor = colors.bg,
+  backgroundColor,
   keyboardOffset = 0,
 }: Props) {
+  const { colors, mode } = useTheme();
   const Container = scroll ? ScrollView : View;
   const contentStyle = { padding: padded ? spacing.lg : 0 };
+  const bg = backgroundColor ?? colors.background;
+  const barStyle =
+    mode === 'dark'
+      ? 'light-content'
+      : statusBarStyle === 'dark'
+      ? 'dark-content'
+      : 'light-content';
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor }}>
-      <StatusBar barStyle={statusBarStyle === 'dark' ? 'dark-content' : 'light-content'} />
+    <SafeAreaView style={{ flex: 1, backgroundColor: bg }}>
+      <StatusBar barStyle={barStyle} />
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}

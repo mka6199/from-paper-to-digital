@@ -1,50 +1,37 @@
-// src/services/settings.ts
-import { db, auth, ensureAuth } from '../../firebase';
-import { doc, getDoc, onSnapshot, serverTimestamp, setDoc, updateDoc } from 'firebase/firestore';
 
-export type Settings = {
-  uid: string;
-  dueReminders?: boolean;     // create “due” notifications
-  monthlySummary?: boolean;   // future: monthly digest
-  currency?: 'AED';           // keep AED for now
-  displayName?: string;       // prefer showing name instead of email
-  createdAt?: any;
-  updatedAt?: any;
-};
+import { getAuth } from 'firebase/auth';
+import { db } from '../../firebase'; 
+import {
+  doc,
+  getDoc,
+  setDoc,
+  onSnapshot,
+  serverTimestamp,
+} from 'firebase/firestore';
+import type { OwnerSettings } from '../types/settings';
 
-function ref() {
-  const uid = auth.currentUser?.uid;
-  if (!uid) throw new Error('Not signed in');
-  return doc(db, 'settings', uid);
+const coll = 'settings'; 
+
+export async function getMySettings(): Promise<OwnerSettings | null> {
+  const uid = getAuth().currentUser?.uid;
+  if (!uid) throw new Error('Not authenticated');
+  const ref = doc(db, coll, uid);
+  const snap = await getDoc(ref);
+  return snap.exists() ? ({ ownerId: uid, ...(snap.data() as any) } as OwnerSettings) : null;
 }
 
-export async function getMySettings(): Promise<Settings | null> {
-  await ensureAuth();
-  const snap = await getDoc(ref());
-  return snap.exists() ? (snap.data() as Settings) : null;
+export function subscribeMySettings(cb: (s: OwnerSettings | null) => void) {
+  const uid = getAuth().currentUser?.uid;
+  if (!uid) throw new Error('Not authenticated');
+  const ref = doc(db, coll, uid);
+  return onSnapshot(ref, (snap) => {
+    cb(snap.exists() ? ({ ownerId: uid, ...(snap.data() as any) } as OwnerSettings) : null);
+  });
 }
 
-export function subscribeMySettings(cb: (s: Settings | null) => void): () => void {
-  const r = ref();
-  return onSnapshot(r, (snap) => cb(snap.exists() ? (snap.data() as Settings) : null));
-}
-
-export async function upsertMySettings(patch: Partial<Settings>) {
-  await ensureAuth();
-  const r = ref();
-  const snap = await getDoc(r);
-  if (!snap.exists()) {
-    await setDoc(r, {
-      uid: auth.currentUser!.uid,
-      dueReminders: true,
-      monthlySummary: false,
-      currency: 'AED',
-      displayName: '',
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
-      ...patch,
-    } as Settings);
-  } else {
-    await updateDoc(r, { ...patch, updatedAt: serverTimestamp() } as any);
-  }
+export async function upsertMySettings(patch: Partial<OwnerSettings>): Promise<void> {
+  const uid = getAuth().currentUser?.uid;
+  if (!uid) throw new Error('Not authenticated');
+  const ref = doc(db, coll, uid);
+  await setDoc(ref, { ownerId: uid, ...patch, updatedAt: Date.now(), createdAt: serverTimestamp() }, { merge: true });
 }

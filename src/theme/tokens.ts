@@ -1,3 +1,5 @@
+// src/theme/tokens.ts
+
 export const colors = {
   bg: '#F8F5EF',
   card: '#FFFFFF',
@@ -21,12 +23,29 @@ export const colors = {
     fontWeight: '600',
     color: '#333',
   },
-  
+
   focus: '#2563EB',
+
+  primary: '#166534',          
+  primaryPressed: '#14532D',   
 };
 
-export const spacing = { xs: 4, sm: 8, md: 12, lg: 16, xl: 24, '2xl': 32 };
-export const radii = { sm: 8, md: 12, lg: 16, pill: 999 };
+export const spacing = {
+  xs: 4,
+  sm: 8,
+  md: 12,
+  lg: 16,
+  xl: 24,
+  '2xl': 32,
+};
+
+export const radii = {
+  sm: 8,
+  md: 12,
+  lg: 16,
+  pill: 999,
+};
+
 export const typography = {
   h1: { fontSize: 22 as const, fontWeight: '700' as const, color: colors.text },
   h2: { fontSize: 18 as const, fontWeight: '700' as const, color: colors.text },

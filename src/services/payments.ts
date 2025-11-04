@@ -46,8 +46,8 @@ export type Payment = {
   amount: number;
   bonus?: number;
   method?: 'cash' | 'bank' | 'other';
-  month?: string;            
-  paidAt?: Timestamp;         
+  month?: string;
+  paidAt?: Timestamp;
   note?: string;
   createdAt?: Timestamp;
   updatedAt?: Timestamp;
@@ -74,7 +74,6 @@ export async function addPaymentRaw(
 }
 
 export const addPayment = addPaymentRaw;
-
 
 export async function recordPaymentAndAdvanceDue(params: {
   workerId: string;
@@ -124,12 +123,9 @@ export async function recordPaymentAndAdvanceDue(params: {
     }, 0);
 
     if (totalThisCycle >= salary) {
-     
       await advanceWorkerDue(params.workerId, end);
     }
-  } catch {
-   
-  }
+  } catch {}
 
   return payId;
 }
@@ -190,7 +186,6 @@ export function subscribeMyPaymentsInMonth(month: string, cb: (rows: Payment[]) 
   );
 }
 
-
 function monthsBetween(start: Date, end: Date): string[] {
   const a = new Date(Date.UTC(start.getFullYear(), start.getMonth(), 1));
   const b = new Date(Date.UTC(end.getFullYear(), end.getMonth(), 1));
@@ -211,6 +206,8 @@ function subscribeRangeViaMonths(
   const months = monthsBetween(start, end);
   const store: Record<string, Payment> = {};
   const unsubs: Array<() => void> = [];
+
+  let permissionDeniedOnce = false;
 
   const flush = () => {
     const list = Object.values(store)
@@ -237,7 +234,17 @@ function subscribeRangeViaMonths(
         });
         flush();
       },
-      (err) => console.warn('fallback month subscribe error:', err)
+      (err) => {
+        const code = (err as any)?.code;
+        if (code === 'permission-denied') {
+          if (!permissionDeniedOnce) {
+            permissionDeniedOnce = true;
+            console.warn('fallback month subscribe permission-denied (likely legacy docs missing ownerUid).');
+          }
+          return;
+        }
+        console.warn('fallback month subscribe error:', err);
+      }
     );
     unsubs.push(unsub);
   });
@@ -285,20 +292,16 @@ export function subscribeMyPaymentsInRange(
       (err) => {
         if ((err as any)?.code === 'failed-precondition') {
           console.warn('Payments index missing; using month fallback');
-         
           const off = subscribeRangeViaMonths(uid, start, end, cb);
-         
           return off;
         }
         console.warn('subscribeMyPaymentsInRange error:', err);
       }
     );
   } catch (e) {
-   
     return subscribeRangeViaMonths(uid, start, end, cb);
   }
 }
-
 
 export function subscribeWorkerPayments(workerId: string, cb: (rows: Payment[]) => void): () => void {
   const uid = auth.currentUser?.uid;
@@ -319,7 +322,6 @@ export function subscribeWorkerPayments(workerId: string, cb: (rows: Payment[]) 
     (err) => console.warn('subscribeWorkerPayments error:', err)
   );
 }
-
 
 export async function listMyPaymentsForMonth(month: string): Promise<Payment[]> {
   await ensureAuth();

@@ -1,13 +1,9 @@
-// src/components/system/NotificationDaemon.tsx
 import React from 'react';
 import { Timestamp } from 'firebase/firestore';
 import { subscribeDueWorkers } from '../../services/workers';
 import { ensureDueNotification } from '../../services/notifications';
 
-/**
- * Listens for workers whose nextDueAt <= now and creates a single "Payment due"
- * notification per worker per due cycle.
- */
+
 export default function NotificationDaemon() {
   React.useEffect(() => {
     const unsub = subscribeDueWorkers(new Date(), async (dueWorkers) => {
@@ -24,5 +20,5 @@ export default function NotificationDaemon() {
     return () => { try { unsub(); } catch {} };
   }, []);
 
-  return null; // renders nothing
+  return null; 
 }
