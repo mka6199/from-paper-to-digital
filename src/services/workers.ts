@@ -20,11 +20,14 @@ export type Worker = {
   name: string;
   role?: string;
   monthlySalaryAED?: number;
-  baseSalary?: number;        
+  baseSalary?: number;
   avatarUrl?: string | null;
   ownerUid?: string | null;
 
-  nextDueAt?: any;           
+  status?: 'active' | 'former';
+  terminatedAt?: any;
+
+  nextDueAt?: any;
   createdAt?: any;
   updatedAt?: any;
 };
@@ -50,12 +53,15 @@ function toWorker(id: string, data: any): Worker {
     baseSalary: Number(data?.baseSalary ?? 0),
     avatarUrl: data?.avatarUrl ?? null,
     ownerUid: data?.ownerUid ?? null,
+
+    status: (data?.status as 'active' | 'former') ?? 'active',
+    terminatedAt: data?.terminatedAt ?? null,
+
     nextDueAt: data?.nextDueAt,
     createdAt: data?.createdAt,
     updatedAt: data?.updatedAt,
   };
 }
-
 
 export function getWorkerCycleWindow(w: Worker): { start: Date; end: Date } {
   const end =
@@ -74,21 +80,30 @@ export async function getWorker(id: string): Promise<Worker | null> {
   return toWorker(snap.id, snap.data());
 }
 
-export async function listWorkers(): Promise<Worker[]> {
+export async function listWorkers(opts?: { status?: 'active' | 'former' | 'all' }): Promise<Worker[]> {
   await ensureAuth();
   const uid = auth.currentUser!.uid;
+  const status = opts?.status ?? 'active';
+
   const qy = query(COL, where('ownerUid', '==', uid), orderBy('createdAt', 'desc'));
   const snap = await getDocs(qy);
-  return snap.docs.map((d) => toWorker(d.id, d.data()));
+  let rows = snap.docs.map((d) => toWorker(d.id, d.data()));
+
+  if (status !== 'all') rows = rows.filter((w) => (w.status ?? 'active') === status);
+  return rows;
 }
 
-export function subscribeMyWorkers(cb: (workers: Worker[]) => void): () => void {
+export function subscribeMyWorkers(
+  cb: (workers: Worker[]) => void,
+  opts?: { status?: 'active' | 'former' | 'all' }
+): () => void {
   const uid = auth.currentUser?.uid;
   if (!uid) throw new Error('Not signed in');
 
+  const status = opts?.status ?? 'active';
   const qy = query(COL, where('ownerUid', '==', uid));
-  const unsub = onSnapshot(qy, (snap) => {
-    const list = snap.docs.map((d) => toWorker(d.id, d.data()));
+  const unsub = onSnapshot(qy, async (snap) => {
+    let list = snap.docs.map((d) => toWorker(d.id, d.data()));
 
     const now = Timestamp.now();
     list.forEach(async (w) => {
@@ -98,10 +113,11 @@ export function subscribeMyWorkers(cb: (workers: Worker[]) => void): () => void 
             nextDueAt: w.createdAt || now,
             updatedAt: serverTimestamp(),
           });
-        } catch {
-        }
+        } catch {}
       }
     });
+
+    if (status !== 'all') list = list.filter((w) => (w.status ?? 'active') === status);
 
     list.sort((a, b) => tsSeconds(b.createdAt) - tsSeconds(a.createdAt));
     cb(list);
@@ -128,17 +144,19 @@ export function subscribeDueWorkers(before: Date, cb: (workers: Worker[]) => voi
         return !!t && tsSeconds(t) <= tsSeconds(until);
       })
     );
-  });
+  }, { status: 'active' }); 
 }
 
 export async function addWorker(
-  w: Omit<Worker, 'id' | 'createdAt' | 'updatedAt' | 'ownerUid' | 'nextDueAt'>
+  w: Omit<Worker, 'id' | 'createdAt' | 'updatedAt' | 'ownerUid' | 'nextDueAt' | 'status' | 'terminatedAt'>
 ) {
   await ensureAuth();
   const uid = auth.currentUser!.uid;
   const ref = await addDoc(COL, {
     ...w,
     ownerUid: uid,
+    status: 'active',        
+    terminatedAt: null,
     nextDueAt: serverTimestamp(),
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),

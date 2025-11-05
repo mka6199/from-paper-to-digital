@@ -1,4 +1,3 @@
-// src/screens/SettingsScreen.tsx
 import React from 'react';
 import {
   View,
@@ -14,7 +13,7 @@ import {
 } from 'react-native';
 import { CommonActions } from '@react-navigation/native';
 import Screen from '../components/layout/Screen';
-import { spacing, typography } from '../theme/tokens';
+import { spacing } from '../theme/tokens';
 import AppHeader from '../components/layout/AppHeader';
 import { signOut } from '../../firebase';
 import { AuthContext } from '../context/AuthProvider';
@@ -22,21 +21,25 @@ import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
 import { useTheme } from '../theme/ThemeProvider';
-import { useCurrency } from '../context/CurrencyProvider'; // ✅ FIXED PATH
+import { useCurrency } from '../context/CurrencyProvider';
+import TextField from '../components/primitives/TextField';
+import { upsertMyProfile } from '../services/profile';
 
 export default function SettingsScreen({ navigation }: any) {
   const { profile } = React.useContext(AuthContext);
   const { colors, mode, setMode } = useTheme();
-
-  // ✅ currency context
-  const { currency, setCurrency, supported, format, symbols } = useCurrency();
+  const { currency, setCurrency, supported, format } = useCurrency();
 
   const [darkMode, setDarkMode] = React.useState(mode === 'dark');
   const [notificationsEnabled, setNotificationsEnabled] = React.useState(true);
   const [language, setLanguage] = React.useState<'English' | 'Arabic'>('English');
-
-  // local UI state for the inline dropdown
   const [showCurrencyDropdown, setShowCurrencyDropdown] = React.useState(false);
+  const [showLanguageDropdown, setShowLanguageDropdown] = React.useState(false);
+
+  const [salaryText, setSalaryText] = React.useState(
+    profile?.salaryMonthlyAED != null ? String(profile.salaryMonthlyAED) : ''
+  );
+  const [savingSalary, setSavingSalary] = React.useState(false);
 
   React.useEffect(() => {
     (async () => {
@@ -54,20 +57,19 @@ export default function SettingsScreen({ navigation }: any) {
         }
         if (ntf !== null) setNotificationsEnabled(ntf === '1');
         if (lang === 'English' || lang === 'Arabic') setLanguage(lang as any);
-
-        // If you stored a previous currency, sync it to the context (and vice-versa).
-        if (curr && supported.includes(curr as any)) {
-          setCurrency(curr as any);
-        }
+        if (curr && supported.includes(curr as any)) setCurrency(curr as any);
       } catch {}
     })();
   }, [setMode, setCurrency, supported]);
+
+  React.useEffect(() => {
+    if (profile?.salaryMonthlyAED != null) setSalaryText(String(profile.salaryMonthlyAED));
+  }, [profile?.salaryMonthlyAED]);
 
   const persist = React.useCallback(async (key: string, val: string) => {
     try { await AsyncStorage.setItem(key, val); } catch {}
   }, []);
 
-  // keep AsyncStorage in sync when currency changes via inline picker
   React.useEffect(() => {
     persist('settings.currency', currency);
   }, [currency, persist]);
@@ -79,15 +81,8 @@ export default function SettingsScreen({ navigation }: any) {
 
   const resetToAuth = React.useCallback(() => {
     let parent = navigation as any;
-    while (parent?.getParent && parent.getParent()) {
-      parent = parent.getParent();
-    }
-    parent?.dispatch?.(
-      CommonActions.reset({
-        index: 0,
-        routes: [{ name: 'Auth' }],
-      })
-    );
+    while (parent?.getParent && parent.getParent()) parent = parent.getParent();
+    parent?.dispatch?.(CommonActions.reset({ index: 0, routes: [{ name: 'Auth' }] }));
   }, [navigation]);
 
   function onLogout() {
@@ -141,7 +136,6 @@ export default function SettingsScreen({ navigation }: any) {
     }
   };
 
-  // ⬇️ keep your original ActionSheet flow (nothing removed)
   const pickCurrency = () => {
     const options = [...supported, 'Cancel'] as const;
     if (Platform.OS === 'ios') {
@@ -188,7 +182,22 @@ export default function SettingsScreen({ navigation }: any) {
     else Alert.alert('Privacy Policy', 'Privacy page is not configured yet.');
   };
 
-  // ---------- UI ----------
+  async function saveSalary() {
+    const n = Number(salaryText);
+    if (!Number.isFinite(n) || n < 0) {
+      Alert.alert('Invalid salary', 'Please enter a non-negative number (AED).');
+      return;
+    }
+    setSavingSalary(true);
+    try {
+      await upsertMyProfile({ salaryMonthlyAED: n });
+    } catch (e: any) {
+      Alert.alert('Error', e?.message ?? 'Could not save salary.');
+    } finally {
+      setSavingSalary(false);
+    }
+  }
+
   return (
     <Screen>
       <AppHeader title="Settings" />
@@ -196,7 +205,6 @@ export default function SettingsScreen({ navigation }: any) {
         style={[styles.container, { backgroundColor: colors.background }]}
         contentContainerStyle={{ paddingBottom: spacing['2xl'] }}
       >
-        {/* Account */}
         <View style={[styles.section, { borderColor: colors.border, backgroundColor: colors.surface }]}>
           <Text style={[styles.sectionTitle, { color: colors.subtext }]}>Account</Text>
 
@@ -213,7 +221,7 @@ export default function SettingsScreen({ navigation }: any) {
               <Ionicons name="mail-outline" size={22} color={colors.brand} />
               <Text style={[styles.itemText, { color: colors.text }]}>Email</Text>
             </View>
-            <Text style={[styles.small, { color: colors.subtext }]} numberOfLines={1}>
+            <Text style={{ color: colors.subtext, fontSize: 14 }} numberOfLines={1}>
               {profile?.email}
             </Text>
           </View>
@@ -223,13 +231,12 @@ export default function SettingsScreen({ navigation }: any) {
               <Ionicons name="id-card-outline" size={22} color={colors.brand} />
               <Text style={[styles.itemText, { color: colors.text }]}>Full Name</Text>
             </View>
-            <Text style={[styles.small, { color: colors.subtext }]} numberOfLines={1}>
+            <Text style={{ color: colors.subtext, fontSize: 14 }} numberOfLines={1}>
               {displayName}
             </Text>
           </View>
         </View>
 
-        {/* Preferences */}
         <View style={[styles.section, { borderColor: colors.border, backgroundColor: colors.surface }]}>
           <Text style={[styles.sectionTitle, { color: colors.subtext }]}>Preferences</Text>
 
@@ -259,18 +266,91 @@ export default function SettingsScreen({ navigation }: any) {
             />
           </View>
 
-          <Pressable style={styles.item} onPress={pickLanguage}>
+          <Pressable
+            style={styles.item}
+            onPress={() => setShowLanguageDropdown((s) => !s)}
+            accessibilityRole="button"
+            accessibilityLabel="Change Language"
+          >
             <View style={styles.itemLeft}>
               <Ionicons name="globe-outline" size={22} color={colors.brand} />
               <Text style={[styles.itemText, { color: colors.text }]}>Language</Text>
             </View>
             <View style={styles.itemLeft}>
-              <Text style={[styles.small, { color: colors.subtext }]}>{language}</Text>
-              <Ionicons name="chevron-forward" size={18} color={colors.subtext} />
+              <Text style={{ color: colors.subtext, fontSize: 14 }}>{language}</Text>
+              <Ionicons
+                name={showLanguageDropdown ? 'chevron-up' : 'chevron-forward'}
+                size={18}
+                color={colors.subtext}
+              />
             </View>
           </Pressable>
 
-          {/* Currency selector row (tap toggles inline dropdown) */}
+          {showLanguageDropdown && (
+            <View style={{ paddingHorizontal: spacing.lg, paddingBottom: spacing.md }}>
+              <View
+                style={{
+                  borderWidth: StyleSheet.hairlineWidth,
+                  borderColor: colors.border,
+                  backgroundColor: colors.surface,
+                  borderRadius: 12,
+                  overflow: 'hidden',
+                }}
+              >
+                {(['English', 'Arabic'] as const).map((lng, idx) => {
+                  const isActive = lng === language;
+                  return (
+                    <Pressable
+                      key={lng}
+                      onPress={() => {
+                        setLanguage(lng);
+                        AsyncStorage.setItem('settings.language', lng).catch(() => {});
+                      }}
+                      style={({ pressed }) => [
+                        {
+                          paddingVertical: 12,
+                          paddingHorizontal: 12,
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          backgroundColor: isActive ? `${colors.focus}10` : colors.surface,
+                          borderTopWidth: idx === 0 ? 0 : StyleSheet.hairlineWidth,
+                          borderColor: colors.border,
+                        },
+                        pressed && { opacity: 0.9 },
+                      ]}
+                    >
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                        <Text style={{ color: colors.text, fontWeight: '600' }}>{lng}</Text>
+                      </View>
+                      {isActive ? (
+                        <Ionicons name="checkmark-circle" size={18} color={colors.brand} />
+                      ) : (
+                        <Ionicons name="ellipse-outline" size={16} color={colors.border} />
+                      )}
+                    </Pressable>
+                  );
+                })}
+
+                <Pressable
+                  onPress={pickLanguage}
+                  style={({ pressed }) => [
+                    {
+                      paddingVertical: 12,
+                      paddingHorizontal: 12,
+                      alignItems: 'center',
+                      borderTopWidth: StyleSheet.hairlineWidth,
+                      borderColor: colors.border,
+                    },
+                    pressed && { opacity: 0.9 },
+                  ]}
+                >
+                  <Text style={{ color: colors.subtext }}>More options…</Text>
+                </Pressable>
+              </View>
+            </View>
+          )}
+
           <Pressable
             style={styles.item}
             onPress={() => setShowCurrencyDropdown((s) => !s)}
@@ -282,7 +362,7 @@ export default function SettingsScreen({ navigation }: any) {
               <Text style={[styles.itemText, { color: colors.text }]}>Currency Format</Text>
             </View>
             <View style={styles.itemLeft}>
-              <Text style={[styles.small, { color: colors.subtext }]}>{currency}</Text>
+              <Text style={{ color: colors.subtext, fontSize: 14 }}>{currency}</Text>
               <Ionicons
                 name={showCurrencyDropdown ? 'chevron-up' : 'chevron-forward'}
                 size={18}
@@ -291,7 +371,6 @@ export default function SettingsScreen({ navigation }: any) {
             </View>
           </Pressable>
 
-          {/* Inline dropdown panel (additive; keeps your ActionSheet pickCurrency too) */}
           {showCurrencyDropdown && (
             <View style={{ paddingHorizontal: spacing.lg, paddingBottom: spacing.md }}>
               <View
@@ -329,8 +408,7 @@ export default function SettingsScreen({ navigation }: any) {
                       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
                         <Text style={{ color: colors.text, fontWeight: '600' }}>{c}</Text>
                         <Text style={{ color: colors.subtext }}>
-                          {/* live preview: 100 AED -> converted */}
-                          {format(100, c as any)} {/* 100 AED sample */}
+                          {format(100, c as any)}
                         </Text>
                       </View>
                       {isActive ? (
@@ -342,7 +420,6 @@ export default function SettingsScreen({ navigation }: any) {
                   );
                 })}
 
-                {/* Fallback to your original ActionSheet flow if they prefer that UI */}
                 <Pressable
                   onPress={pickCurrency}
                   style={({ pressed }) => [
@@ -363,7 +440,41 @@ export default function SettingsScreen({ navigation }: any) {
           )}
         </View>
 
-        {/* About */}
+        <View style={[styles.section, { borderColor: colors.border, backgroundColor: colors.surface }]}>
+          <Text style={[styles.sectionTitle, { color: colors.subtext }]}>Income</Text>
+          <View style={[styles.item, { flexDirection: 'column', alignItems: 'stretch', gap: 8, borderTopWidth: StyleSheet.hairlineWidth }]}>
+            <Text style={[styles.itemText, { color: colors.text }]}>Monthly Salary (AED)</Text>
+            <TextField
+              value={salaryText}
+              onChangeText={setSalaryText}
+              keyboardType="number-pad"
+              placeholder="e.g. 5000"
+            />
+            <Pressable
+              onPress={saveSalary}
+              style={({ pressed }) => [
+                {
+                  alignSelf: 'flex-end',
+                  paddingHorizontal: 14,
+                  paddingVertical: 10,
+                  borderRadius: 10,
+                  borderWidth: StyleSheet.hairlineWidth,
+                  borderColor: colors.brand,
+                  backgroundColor: savingSalary ? colors.surface : `${colors.brand}12`,
+                },
+                pressed && { opacity: 0.92 },
+              ]}
+              disabled={savingSalary}
+              accessibilityRole="button"
+              accessibilityLabel="Save monthly salary"
+            >
+              <Text style={{ color: colors.brand, fontWeight: '700' }}>
+                {savingSalary ? 'Saving…' : 'Save'}
+              </Text>
+            </Pressable>
+          </View>
+        </View>
+
         <View style={[styles.section, { borderColor: colors.border, backgroundColor: colors.surface }]}>
           <Text style={[styles.sectionTitle, { color: colors.subtext }]}>About</Text>
 
@@ -392,7 +503,6 @@ export default function SettingsScreen({ navigation }: any) {
           </Pressable>
         </View>
 
-        {/* Logout */}
         <View style={[styles.section, { marginTop: spacing.xl, backgroundColor: colors.surface, borderColor: colors.border }]}>
           <Pressable
             onPress={onLogout}
@@ -408,7 +518,7 @@ export default function SettingsScreen({ navigation }: any) {
         </View>
 
         <View style={{ alignItems: 'center', paddingVertical: spacing.md }}>
-          <Text style={[styles.small, { color: colors.subtext }]}>
+          <Text style={{ color: colors.subtext, fontSize: 14 }}>
             v{(Constants?.expoConfig as any)?.version || (Constants?.manifest as any)?.version || '1.0.0'}
           </Text>
         </View>
@@ -443,13 +553,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.md,
   },
-  itemText: {
-    fontSize: 16,
-  },
+  itemText: { fontSize: 16 },
   small: { fontSize: 14 },
-  switchItem: {
-    justifyContent: 'space-between',
-  },
+  switchItem: { justifyContent: 'space-between' },
   logoutButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -459,8 +565,5 @@ const styles = StyleSheet.create({
     borderTopWidth: StyleSheet.hairlineWidth,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
-  logoutText: {
-    fontWeight: '700',
-    fontSize: 16,
-  },
+  logoutText: { fontWeight: '700', fontSize: 16 },
 });

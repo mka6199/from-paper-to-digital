@@ -1,5 +1,3 @@
-// src/theme/tokens.ts
-
 export const colors = {
   bg: '#F8F5EF',
   card: '#FFFFFF',
@@ -18,6 +16,7 @@ export const colors = {
 
   success: '#15803D',
   warn: '#92400E',
+
   label: {
     fontSize: 15,
     fontWeight: '600',
@@ -26,8 +25,46 @@ export const colors = {
 
   focus: '#2563EB',
 
-  primary: '#166534',          
-  primaryPressed: '#14532D',   
+  primary: '#166534',
+  primaryPressed: '#14532D',
+
+  background: '#F8F5EF', 
+  surface: '#FFFFFF',    
+  border: '#E5E7EB',
+
+  neutral100: '#F9FAFB',
+  neutral200: '#E5E7EB',
+  neutral300: '#D1D5DB',
+  neutral700: '#374151',
+  neutral800: '#1F2937',
+  neutral900: '#111827',
+};
+
+export const colorsDark = {
+  background: '#0B0F12', 
+  surface: '#11161A',    
+  surfaceElevated: '#171D22',
+
+  text: '#E5E7EB',
+  subtext: '#9CA3AF',
+
+  border: '#27323A',
+  divider: '#27323A',
+
+  brand: '#22C55E',        
+  brandPressed: '#16A34A',
+
+  danger: '#EF4444',
+  dangerPressed: '#B91C1C',
+
+  success: '#22C55E',
+  warn: '#F59E0B',
+  focus: '#60A5FA',
+
+  bg: '#0B0F12',
+  card: '#11161A',
+  primary: '#22C55E',
+  primaryPressed: '#16A34A',
 };
 
 export const spacing = {
@@ -39,11 +76,21 @@ export const spacing = {
   '2xl': 32,
 };
 
+export const spacingCompact = {
+  xs: 3,
+  sm: 6,
+  md: 10,
+  lg: 14,
+  xl: 20,
+  '2xl': 28,
+};
+
 export const radii = {
   sm: 8,
   md: 12,
   lg: 16,
   pill: 999,
+  xl: 20,
 };
 
 export const typography = {

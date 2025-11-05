@@ -1,5 +1,5 @@
 import React from 'react';
-import { Alert, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Alert, FlatList, StyleSheet, Text, View } from 'react-native';
 import Screen from '../../components/layout/Screen';
 import AppHeader from '../../components/layout/AppHeader';
 import Card from '../../components/primitives/Card';
@@ -15,12 +15,10 @@ import {
   rangeThisYear,
 } from '../../services/payments';
 
-// ✅ currency
 import { useCurrency } from '../../context/CurrencyProvider';
 
 type RangeKey = 'last3' | 'thisYear' | 'custom';
 
-// keep the name but delegate to currency (non-breaking)
 function useFmtAED() {
   const { format } = useCurrency();
   return React.useCallback((n: number) => format(n), [format]);
@@ -34,7 +32,7 @@ function PaymentRow({ p }: { p: Payment }) {
   const total = (Number(p.amount) || 0) + (Number(p.bonus) || 0);
 
   return (
-    <Card style={{ marginBottom: spacing.md }}>
+    <Card style={[styles.rowCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
       <Text style={[typography.h2, { marginBottom: 2, color: colors.text }]}>{d}</Text>
       <Text style={[typography.small, { color: colors.subtext }]}>
         Worker: {p.workerName ?? '—'} • Method: {p.method ?? '—'}
@@ -70,7 +68,7 @@ function useControlledRange(initial: { start: Date; end: Date }) {
 
 function PaymentHistoryScreen({ route }: any) {
   const { colors } = useTheme();
-  const fmtAED = useFmtAED(); // ✅
+  const fmtAED = useFmtAED(); 
   const initial = monthRange(new Date());
   const [rangeKey, setRangeKey] = React.useState<RangeKey>('last3');
   const { start, end, startText, endText, setStartText, setEndText, apply } = useControlledRange(initial);
@@ -128,32 +126,35 @@ function PaymentHistoryScreen({ route }: any) {
       <View style={{ flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.md }}>
         <Button
           label="Last 3 months"
+          size="sm"
           variant={rangeKey === 'last3' ? 'solid' : 'soft'}
           onPress={() => setRangeKey('last3')}
         />
         <Button
           label="This year"
+          size="sm"
           variant={rangeKey === 'thisYear' ? 'solid' : 'soft'}
           onPress={() => setRangeKey('thisYear')}
         />
         <Button
           label="Custom"
+          size="sm"
           variant={rangeKey === 'custom' ? 'solid' : 'soft'}
           onPress={() => setRangeKey('custom')}
         />
       </View>
 
       {rangeKey === 'custom' && (
-        <Card style={{ marginBottom: spacing.md }}>
+        <Card style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
           <View style={{ gap: spacing.sm }}>
             <TextField label="Start (YYYY-MM-DD)" value={startText} onChangeText={setStartText} />
             <TextField label="End (YYYY-MM-DD)" value={endText} onChangeText={setEndText} />
-            <Button label="Apply" onPress={() => apply()} />
+            <Button label="Apply" size="sm" onPress={() => apply()} />
           </View>
         </Card>
       )}
 
-      <Card style={{ marginBottom: spacing.md }}>
+      <Card style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
         <Text style={[typography.small, { color: colors.subtext }]}>Total paid in range</Text>
         <Text style={[typography.h2, { marginTop: 4, color: colors.text }]}>{fmtAED(total)}</Text>
       </Card>
@@ -174,5 +175,19 @@ function PaymentHistoryScreen({ route }: any) {
     </Screen>
   );
 }
+
+const styles = StyleSheet.create({
+  card: {
+    marginBottom: spacing.md,
+    borderWidth: 1,
+    borderRadius: 16,
+    padding: spacing.lg,
+  },
+  rowCard: {
+    borderWidth: 1,
+    borderRadius: 16,
+    padding: spacing.lg,
+  },
+});
 
 export default PaymentHistoryScreen;

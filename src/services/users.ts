@@ -1,5 +1,5 @@
 import { db, ensureAuth } from '../../firebase';
-import { doc, getDoc, setDoc, serverTimestamp, updateDoc, Timestamp } from 'firebase/firestore';
+import { doc, getDoc, setDoc, serverTimestamp, updateDoc, Timestamp, onSnapshot } from 'firebase/firestore';
 
 export type UserProfile = {
   uid: string;
@@ -8,18 +8,19 @@ export type UserProfile = {
   firstName?: string;
   lastName?: string;
   phone?: string;
-  dob?: any;        
-  dobYMD?: string;  
+  dob?: any;
+  dobYMD?: string;
   isActive?: boolean;
+  salaryMonthlyAED?: number | null;   // ← allow null
   createdAt?: any;
   updatedAt?: any;
   lastActiveAt?: any;
 };
 
+
 function userDoc(uid: string) {
   return doc(db, 'users', uid);
 }
-
 
 export async function createUserProfile(
   uid: string,
@@ -28,8 +29,9 @@ export async function createUserProfile(
     firstName: string;
     lastName: string;
     phone: string;
-    dobYMD: string; 
+    dobYMD: string;
     role?: 'user' | 'admin';
+    salaryMonthlyAED?: number;
   }
 ) {
   await setDoc(userDoc(uid), {
@@ -37,11 +39,12 @@ export async function createUserProfile(
     email: payload.email,
     role: payload.role ?? 'user',
     firstName: payload.firstName,
-    lastName : payload.lastName,
-    phone    : payload.phone,
-    dobYMD   : payload.dobYMD,
-    dob      : toTimestampFromYMD(payload.dobYMD),
-    isActive : true,
+    lastName: payload.lastName,
+    phone: payload.phone,
+    dobYMD: payload.dobYMD,
+    dob: toTimestampFromYMD(payload.dobYMD),
+    isActive: true,
+    salaryMonthlyAED: typeof payload.salaryMonthlyAED === 'number' ? payload.salaryMonthlyAED : null,
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   } as UserProfile);
@@ -56,6 +59,7 @@ export async function ensureUserProfile(uid: string, email: string) {
       email,
       role: 'user',
       isActive: true,
+      salaryMonthlyAED: null,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     } as UserProfile);
@@ -67,6 +71,30 @@ export async function getMyProfile(): Promise<UserProfile | null> {
   const ref = userDoc(u.uid);
   const snap = await getDoc(ref);
   return snap.exists() ? (snap.data() as UserProfile) : null;
+}
+
+export function subscribeMyProfile(
+  cb: (p: UserProfile | null) => void
+): () => void {
+  return onSnapshot(
+    userDoc((ensureAuth as any).currentUser?.uid ?? ''), // fallback if called pre-auth; safer pattern below
+    () => {}
+  );
+}
+
+/**
+ * Safer subscribe that ensures auth first.
+ */
+export async function subscribeMyProfileSafe(
+  cb: (p: UserProfile | null) => void
+): Promise<() => void> {
+  const u = await ensureAuth();
+  const ref = userDoc(u.uid);
+  return onSnapshot(
+    ref,
+    (snap) => cb(snap.exists() ? (snap.data() as UserProfile) : null),
+    () => cb(null)
+  );
 }
 
 export async function setUserRole(uid: string, role: 'user' | 'admin') {
@@ -92,6 +120,10 @@ function normalizePatch(p: Partial<UserProfile>) {
   const out: any = { ...p };
   if (typeof p.dobYMD === 'string') {
     out.dob = toTimestampFromYMD(p.dobYMD);
+  }
+  if (out.salaryMonthlyAED != null) {
+    const n = Number(out.salaryMonthlyAED);
+    out.salaryMonthlyAED = Number.isFinite(n) && n >= 0 ? n : null;
   }
   return out;
 }

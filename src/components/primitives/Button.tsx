@@ -2,9 +2,12 @@ import React from 'react';
 import { ActivityIndicator, Pressable, Text, View, StyleSheet, ViewStyle } from 'react-native';
 import { radii, spacing } from '../../theme/tokens';
 import { useTheme } from '../../theme/ThemeProvider';
+import type { TextStyle } from 'react-native';
 
 type Variant = 'solid' | 'outline' | 'soft';
 type Tone = 'green' | 'warn' | 'gold' | 'danger';
+type Size = 'md' | 'sm';
+type Density = 'comfortable' | 'compact';
 
 type Props = {
   label: string;
@@ -18,6 +21,9 @@ type Props = {
   iconLeft?: React.ReactNode;
   iconRight?: React.ReactNode;
   accessibilityLabel?: string;
+
+  size?: Size;
+  density?: Density;
 };
 
 const wrapIfString = (n?: React.ReactNode, color = '#fff') =>
@@ -35,6 +41,9 @@ export default function Button({
   iconLeft,
   iconRight,
   accessibilityLabel,
+
+  size = 'md',
+  density = 'comfortable',
 }: Props) {
   const { colors } = useTheme();
 
@@ -63,6 +72,17 @@ export default function Button({
 
   const isDisabled = disabled || loading;
 
+  const verticalPad = size === 'sm'
+    ? spacing.sm
+    : spacing.md;
+
+  const textStyle: TextStyle =
+      size === 'sm'
+        ? { fontSize: 14, fontWeight: 600 }
+        : { fontSize: 16, fontWeight: 700 };
+
+  const compactAdjust = density === 'compact' ? { paddingVertical: verticalPad - 4 } : { paddingVertical: verticalPad };
+
   return (
     <Pressable
       accessibilityRole="button"
@@ -71,6 +91,7 @@ export default function Button({
       disabled={isDisabled}
       style={({ pressed }) => [
         styles.base,
+        compactAdjust,
         { backgroundColor },
         border,
         fullWidth && { width: '100%' },
@@ -84,7 +105,7 @@ export default function Button({
         {loading ? (
           <ActivityIndicator size="small" color={textColor} />
         ) : (
-          <Text style={[styles.label, { color: textColor }]}>{label}</Text>
+          <Text style={[textStyle, { color: textColor }]}>{label}</Text>
         )}
         {!loading && wrapIfString(iconRight, textColor)}
       </View>
@@ -94,13 +115,11 @@ export default function Button({
 
 const styles = StyleSheet.create({
   base: {
-    paddingVertical: spacing.md,
     paddingHorizontal: spacing.lg,
     borderRadius: radii.lg,
     alignItems: 'center',
-    minHeight: 44,
+    minHeight: 36, 
   },
   row: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  label: { fontSize: 16, fontWeight: '700' },
   iconText: { fontSize: 16 },
 });

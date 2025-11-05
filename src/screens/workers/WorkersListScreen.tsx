@@ -10,7 +10,6 @@ import {
 } from 'react-native';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import Screen from '../../components/layout/Screen';
-import AppHeader from '../../components/layout/AppHeader';
 import Card from '../../components/primitives/Card';
 import WorkerListItem from '../../components/composites/WorkerListItem';
 import { spacing, typography } from '../../theme/tokens';
@@ -18,33 +17,38 @@ import { subscribeMyWorkers, listWorkers, Worker } from '../../services/workers'
 import { useFocusEffect } from '@react-navigation/native';
 import { useTheme } from '../../theme/ThemeProvider';
 
+type Filter = 'active' | 'former';
+
 export default function WorkersListScreen({ navigation }: any) {
   const { colors } = useTheme();
+
   const [rows, setRows] = React.useState<Worker[]>([]);
   const [loading, setLoading] = React.useState(false);
+  const [filter, setFilter] = React.useState<Filter>('active');
+
   const tabBarHeight = useBottomTabBarHeight?.() ?? 0;
 
   useFocusEffect(
     React.useCallback(() => {
       let unsub: undefined | (() => void);
       try {
-        unsub = subscribeMyWorkers((list) => setRows(list));
+        unsub = subscribeMyWorkers((list) => setRows(list), { status: filter });
       } catch (e) {
         console.warn('subscribeMyWorkers failed:', e);
       }
       return () => unsub && unsub();
-    }, [])
+    }, [filter])
   );
 
   const refresh = React.useCallback(async () => {
     setLoading(true);
     try {
-      const data = await listWorkers();
+      const data = await listWorkers({ status: filter });
       setRows(data);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [filter]);
 
   const renderItem = ({ item }: { item: Worker }) => (
     <Card
@@ -72,21 +76,58 @@ export default function WorkersListScreen({ navigation }: any) {
     </Card>
   );
 
+  const Toggle = (
+    <View style={{ paddingHorizontal: spacing.lg, paddingTop: spacing.lg }}>
+      <Text style={[typography.h1, { color: colors.text }]}>Workers</Text>
+
+      <View
+        style={[
+          styles.segment,
+          { backgroundColor: colors.surface, borderColor: colors.border },
+        ]}
+      >
+        {(['active', 'former'] as Filter[]).map((key) => {
+          const active = filter === key;
+          return (
+            <Pressable
+              key={key}
+              onPress={() => setFilter(key)}
+              style={[
+                styles.segmentItem,
+                active && { backgroundColor: colors.brand },
+              ]}
+              accessibilityRole="button"
+              accessibilityState={{ selected: active }}
+              accessibilityLabel={`Show ${key} workers`}
+            >
+              <Text
+                style={[
+                  styles.segmentLabel,
+                  { color: active ? '#fff' : colors.text },
+                ]}
+              >
+                {key === 'active' ? 'Active' : 'Former'}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
+    </View>
+  );
+
   return (
     <Screen>
-      <View style={{ paddingHorizontal: spacing.lg, paddingTop: spacing.lg }}>
-        <Text style={[typography.h1, { color: colors.text }]}>Workers</Text>
-      </View>
-
       <FlatList
         data={rows}
         keyExtractor={(w) => String(w.id)}
         renderItem={renderItem}
         ItemSeparatorComponent={() => <View style={{ height: spacing.lg }} />}
+        ListHeaderComponent={Toggle}
         contentContainerStyle={{
           paddingHorizontal: spacing.lg,
           paddingTop: spacing.md,
-          paddingBottom: spacing['2xl'] + 80, // extra space for FAB
+          paddingBottom: spacing['2xl'] + 80, 
+          gap: spacing.md,
         }}
         refreshControl={
           <RefreshControl
@@ -106,32 +147,35 @@ export default function WorkersListScreen({ navigation }: any) {
                 { textAlign: 'center', marginTop: spacing.xl, color: colors.subtext },
               ]}
             >
-              No workers yet. Tap the + button to add one.
+              {filter === 'active'
+                ? 'No active workers yet. Tap the + button to add one.'
+                : 'No former workers.'}
             </Text>
           ) : null
         }
         showsVerticalScrollIndicator={false}
       />
 
-      {/* FAB */}
-      <View pointerEvents="box-none" style={StyleSheet.absoluteFill}>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Add worker"
-          onPress={() => navigation.navigate('AddWorker')}
-          style={({ pressed }) => [
-            styles.fab,
-            {
-              bottom: tabBarHeight + spacing.lg,
-              backgroundColor: colors.brand,
-              shadowColor: colors.text,
-            },
-            pressed && { opacity: 0.92 },
-          ]}
-        >
-          <Text style={styles.fabPlus}>+</Text>
-        </Pressable>
-      </View>
+      {filter === 'active' && (
+        <View pointerEvents="box-none" style={StyleSheet.absoluteFill}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Add worker"
+            onPress={() => navigation.navigate('AddWorker')}
+            style={({ pressed }) => [
+              styles.fab,
+              {
+                bottom: tabBarHeight + spacing.lg,
+                backgroundColor: colors.brand,
+                shadowColor: colors.text,
+              },
+              pressed && { opacity: 0.92 },
+            ]}
+          >
+            <Text style={styles.fabPlus}>+</Text>
+          </Pressable>
+        </View>
+      )}
     </Screen>
   );
 }
@@ -140,6 +184,25 @@ const styles = StyleSheet.create({
   card: {
     borderWidth: 1,
     borderRadius: 16,
+  },
+  segment: {
+    marginTop: spacing.md,
+    flexDirection: 'row',
+    borderRadius: 12,
+    borderWidth: 1,
+    padding: 4,
+    gap: 4,
+  },
+  segmentItem: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  segmentLabel: {
+    fontSize: 14,
+    fontWeight: '700',
   },
   fab: {
     position: 'absolute',

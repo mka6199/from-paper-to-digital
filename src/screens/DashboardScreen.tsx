@@ -8,21 +8,10 @@ import { AuthContext } from '../context/AuthProvider';
 import { subscribeMyWorkers, Worker } from '../services/workers';
 import { Payment, monthRange, subscribeMyPaymentsInRange } from '../services/payments';
 import { subscribeMyUnreadCount } from '../services/notifications';
-import DashboardKPIs from '../components/dashboard/DashboardKPIs';
-import { getMyProfile } from '../services/profile';
 import { useTheme } from '../theme/ThemeProvider';
-
-// ✅ ADD: currency hook
 import { useCurrency } from '../context/CurrencyProvider';
 
-// keep the helper name but delegate to currency formatter (non-breaking)
 const moneyFactory = (format: (n: number) => string) => (n: number) => format(n);
-
-const addDays = (d: Date, days: number) => {
-  const x = new Date(d);
-  x.setDate(x.getDate() + days);
-  return x;
-};
 
 function norm(v: any) {
   return String(v ?? '').trim().toLowerCase();
@@ -42,8 +31,9 @@ function matchesPaymentToWorker(p: Payment, w: Worker): boolean {
 
 type Totals = {
   workers: number;
-  dueThisMonth: number;   // stored in AED
-  paidThisMonth: number;  // stored in AED
+  dueNow: number;
+  monthlyLiability: number;
+  paidThisMonth: number;
   hasDueSoon: boolean;
   hasOverdue: boolean;
 };
@@ -51,8 +41,6 @@ type Totals = {
 export default function DashboardScreen({ navigation }: any) {
   const { colors } = useTheme();
   const { profile } = React.useContext(AuthContext);
-
-  // ✅ currency context
   const { format } = useCurrency();
   const money = React.useMemo(() => moneyFactory((n) => format(n)), [format]);
 
@@ -61,24 +49,12 @@ export default function DashboardScreen({ navigation }: any) {
       ? `${profile.firstName}${profile?.lastName ? ' ' + profile.lastName : ''}`
       : '') || profile?.email || 'User';
 
-  const [greetingOverride, setGreetingOverride] = React.useState<string>('');
-  React.useEffect(() => {
-    (async () => {
-      try {
-        const p = await getMyProfile();
-        const fn = (p as any)?.firstName?.trim?.() || '';
-        const ln = (p as any)?.lastName?.trim?.() || '';
-        const full = [fn, ln].filter(Boolean).join(' ');
-        if (full) setGreetingOverride(full);
-      } catch {}
-    })();
-  }, []);
-
   const [workers, setWorkers] = React.useState<Worker[]>([]);
   const [payments, setPayments] = React.useState<Payment[]>([]);
   const [totals, setTotals] = React.useState<Totals>({
     workers: 0,
-    dueThisMonth: 0,
+    dueNow: 0,
+    monthlyLiability: 0,
     paidThisMonth: 0,
     hasDueSoon: false,
     hasOverdue: false,
@@ -92,9 +68,7 @@ export default function DashboardScreen({ navigation }: any) {
     try {
       u = subscribeMyUnreadCount(setUnread);
     } catch {}
-    return () => {
-      if (u) u();
-    };
+    return () => { if (u) u(); };
   }, []);
 
   React.useEffect(() => {
@@ -108,9 +82,7 @@ export default function DashboardScreen({ navigation }: any) {
       console.warn('Dashboard subscribeMyWorkers failed:', e);
       setGotWorkers(true);
     }
-    return () => {
-      if (unsub) unsub();
-    };
+    return () => { if (unsub) unsub(); };
   }, []);
 
   React.useEffect(() => {
@@ -125,9 +97,7 @@ export default function DashboardScreen({ navigation }: any) {
       console.warn('Dashboard subscribeMyPaymentsInRange failed:', e);
       setGotPayments(true);
     }
-    return () => {
-      if (unsub) unsub();
-    };
+    return () => { if (unsub) unsub(); };
   }, []);
 
   React.useEffect(() => {
@@ -149,21 +119,24 @@ export default function DashboardScreen({ navigation }: any) {
           : sum;
       }, 0);
 
-    let dueThisMonth = 0;
+    let monthlyLiability = 0;
+    let dueNow = 0;
     let hasDueSoon = false;
     let hasOverdue = false;
 
     workers.forEach((w) => {
+      monthlyLiability += salaryOf(w);
       const t = (w.nextDueAt?.seconds as number | undefined) ?? 0;
       const inThisMonth = t >= mStartSec && t <= mEndSec;
       if (!inThisMonth) return;
-
       const remaining = Math.max(0, salaryOf(w) - paidInWindow(w, mStart, mEnd));
       if (remaining <= 0) return;
-
-      dueThisMonth += remaining;
-      if (t <= nowSec) hasOverdue = true;
-      else hasDueSoon = true;
+      if (t <= nowSec) {
+        dueNow += remaining;
+        hasOverdue = true;
+      } else {
+        hasDueSoon = true;
+      }
     });
 
     const paidThisMonth = payments.reduce(
@@ -173,12 +146,17 @@ export default function DashboardScreen({ navigation }: any) {
 
     setTotals({
       workers: workers.length,
-      dueThisMonth,    // keep AED internally
-      paidThisMonth,   // keep AED internally
+      dueNow,
+      monthlyLiability,
+      paidThisMonth,
       hasDueSoon,
       hasOverdue,
     });
   }, [workers, payments]);
+
+  const salaryAED = Number(profile?.salaryMonthlyAED ?? 0);
+  const liabilitiesAED = totals.monthlyLiability;
+  const remainingAED = salaryAED - liabilitiesAED;
 
   const Header = (
     <View style={{ paddingBottom: spacing.lg }}>
@@ -195,7 +173,7 @@ export default function DashboardScreen({ navigation }: any) {
       >
         <View style={{ flex: 1 }}>
           <Text style={[typography.h1, { marginBottom: 4, color: colors.text }]} numberOfLines={1}>
-            Welcome, {greetingOverride || displayName} 👋
+            Welcome, {displayName} 👋
           </Text>
           <Text style={[typography.small, { color: colors.subtext }]}>
             Here’s your snapshot for this month.
@@ -231,7 +209,19 @@ export default function DashboardScreen({ navigation }: any) {
         </Card>
 
         <Card style={[styles.statCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-          <Text style={[styles.statLabel, { color: colors.subtext }]}>Due this month</Text>
+          <Text style={[styles.statLabel, { color: colors.subtext }]}>Due now (overdue)</Text>
+          <Text style={[styles.statValue, { color: totals.dueNow > 0 ? tokenColors.danger : colors.text }]}>
+            {money(totals.dueNow)}
+          </Text>
+          {totals.dueNow > 0 && (
+            <Text style={[typography.small, { color: tokenColors.danger }]}>
+              You have overdue salaries to pay.
+            </Text>
+          )}
+        </Card>
+
+        <Card style={[styles.statCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+          <Text style={[styles.statLabel, { color: colors.subtext }]}>Monthly Liabilities</Text>
           <Text
             style={[
               styles.statValue,
@@ -242,8 +232,26 @@ export default function DashboardScreen({ navigation }: any) {
                 : { color: colors.text },
             ]}
           >
-            {money(totals.dueThisMonth)}
+            {money(liabilitiesAED)}
           </Text>
+        </Card>
+
+        <Card style={[styles.statCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+          <Text style={[styles.statLabel, { color: colors.subtext }]}>Salary Left (after liabilities)</Text>
+          <Text
+            style={[
+              styles.statValue,
+              { color: remainingAED < 0 ? tokenColors.danger : colors.text },
+            ]}
+          >
+            {salaryAED > 0 ? money(remainingAED) : 'Set your salary in Settings'}
+          </Text>
+          <Button
+            label="Edit salary in Settings"
+            variant="outline"
+            onPress={() => navigation.navigate('Settings')}
+            fullWidth
+          />
         </Card>
 
         <Card style={[styles.statCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>

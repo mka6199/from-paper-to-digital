@@ -54,7 +54,7 @@ function UserTabs() {
         options={{
           tabBarIcon: ({ color, size }) => (<Ionicons name="home-outline" size={size} color={color} />),
           tabBarLabel: 'Dashboard',
-          tabBarItemStyle: { width: 90, alignItems: 'flex-start', marginLeft: 10 },
+          tabBarItemStyle: { width: 90, alignItems: 'flex-start', marginLeft: 40 },
         }}
       />
       <Tab.Screen
@@ -79,7 +79,7 @@ function UserTabs() {
         options={{
           tabBarIcon: ({ color, size }) => (<Ionicons name="settings-outline" size={size} color={color} />),
           tabBarLabel: 'Settings',
-          tabBarItemStyle: { alignItems: 'flex-end', marginRight: 10 },
+          tabBarItemStyle: { alignItems: 'flex-end', marginRight: 0 },
         }}
       />
       <Tab.Screen
@@ -137,12 +137,9 @@ export default function RootNavigator() {
   const { navTheme } = useTheme();
   const { authReady, profileReady, user, isAdmin } = React.useContext(AuthContext);
 
-  // Only decide once per change
   const last = React.useRef<string | null>(null);
 
-  // Decide the root screen whenever the *combined* readiness changes
   React.useEffect(() => {
-    // Not yet sure if signed-in or not → stay on Splash
     if (!authReady) {
       if (last.current !== 'Splash') {
         resetOnce('Splash');
@@ -151,7 +148,6 @@ export default function RootNavigator() {
       return;
     }
 
-    // Signed out → Auth
     if (!user) {
       if (last.current !== 'Auth') {
         resetOnce('Auth');
@@ -160,7 +156,6 @@ export default function RootNavigator() {
       return;
     }
 
-    // Signed in but profile not ready yet → Splash (prevents any Main flicker)
     if (!profileReady) {
       if (last.current !== 'Splash') {
         resetOnce('Splash');
@@ -169,7 +164,6 @@ export default function RootNavigator() {
       return;
     }
 
-    // Signed in with profile → go to Admin or Main directly
     const target = isAdmin ? 'Admin' : 'Main';
     if (last.current !== target) {
       resetOnce(target as any);

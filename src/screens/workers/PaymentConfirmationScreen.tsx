@@ -1,4 +1,3 @@
-// PaymentConfirmationScreen.tsx
 import React from 'react';
 import { Text, View } from 'react-native';
 import Screen from '../../components/layout/Screen';
@@ -6,10 +5,8 @@ import Button from '../../components/primitives/Button';
 import { spacing, typography } from '../../theme/tokens';
 import { CommonActions } from '@react-navigation/native';
 import { useTheme } from '../../theme/ThemeProvider';
-// ✅ currency
 import { useCurrency } from '../../context/CurrencyProvider';
 
-// small helper to convert #RRGGBB to rgba()
 function hexToRgba(hex: string, alpha: number) {
   const m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
   if (!m) return hex;
@@ -21,13 +18,12 @@ function hexToRgba(hex: string, alpha: number) {
 
 export default function PaymentConfirmationScreen({ route, navigation }: any) {
   const { colors } = useTheme();
-  const { format } = useCurrency(); // ✅
+  const { format } = useCurrency();
+
   const { workerId, workerName, amount, method } = route.params || {};
-
+  const amtAED = Number(amount || 0);           
+  const displayAmount = format(amtAED);      
   const circleBg = hexToRgba(colors.brand, 0.18);
-
-  const amtAED = Number(amount || 0); // stored in AED
-  const displayAmount = format(amtAED); // show in selected currency
 
   return (
     <Screen>
@@ -69,7 +65,7 @@ export default function PaymentConfirmationScreen({ route, navigation }: any) {
               CommonActions.reset({
                 index: 1,
                 routes: [
-                  { name: 'WorkersList' },
+                  { name: 'WorkersList' }, 
                   {
                     name: 'WorkerProfile',
                     params: {
@@ -101,7 +97,7 @@ export default function PaymentConfirmationScreen({ route, navigation }: any) {
                       worker: workerName ? { id: workerId, name: workerName } : undefined,
                     },
                   },
-                  { name: 'WorkerHistoryList', params: { workerId, workerName } },
+                  { name: 'PaymentHistory', params: { workerId, workerName } },
                 ],
               })
             );

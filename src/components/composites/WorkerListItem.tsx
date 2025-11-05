@@ -32,7 +32,6 @@ export default function WorkerListItem({ name, role, onPress }: Props) {
       accessibilityRole="button"
       accessibilityLabel={`Open worker ${name}`}
     >
-      {/* Avatar */}
       <View
         style={[
           styles.avatar,
@@ -42,7 +41,6 @@ export default function WorkerListItem({ name, role, onPress }: Props) {
         <Text style={styles.avatarText}>{initials(name)}</Text>
       </View>
 
-      {/* Texts */}
       <View style={{ flex: 1 }}>
         <Text style={[styles.name, { color: colors.text }]} numberOfLines={1}>
           {name || '—'}
@@ -54,7 +52,6 @@ export default function WorkerListItem({ name, role, onPress }: Props) {
         )}
       </View>
 
-      {/* Simple chevron */}
       <Text style={{ color: colors.subtext, fontSize: 18, marginLeft: spacing.sm }}>
         ›
       </Text>

@@ -3,6 +3,13 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Appearance, ColorSchemeName } from 'react-native';
 import { DarkTheme, DefaultTheme, Theme as NavTheme } from '@react-navigation/native';
 
+import {
+  colors as LIGHT_TOKENS,
+  colorsDark as DARK_TOKENS,
+  spacing as spacingComfortable,
+  spacingCompact as spacingCompactScale,
+} from '../theme/tokens';
+
 type Palette = {
   background: string;
   surface: string;
@@ -15,10 +22,8 @@ type Palette = {
   warn: string;
   focus: string;
 
-  // form helpers
   inputBg?: string;
   inputBorder?: string;
-  // elevations (optional)
   cardElev?: string;
 };
 
@@ -28,80 +33,86 @@ type ThemeContextType = {
   colors: Palette;
   navTheme: NavTheme;
   setMode: (m: 'light' | 'dark') => void;
+
+  density: 'comfortable' | 'compact';
+  setDensity: (d: 'comfortable' | 'compact') => void;
+  spacingScale: typeof spacingComfortable;
 };
 
 const ThemeContext = createContext<ThemeContextType | null>(null);
-const STORAGE_KEY = 'themeMode:v1';
 
-const LIGHT: Palette = {
-  background: '#F8F5EF',
-  surface: '#FFFFFF',
-  card: '#FFFFFF',
-  text: '#111827',
-  subtext: '#6B7280',
-  border: '#E5E7EB',
-  brand: '#166534',
-  danger: '#B91C1C',
-  warn: '#92400E',
-  focus: '#2563EB',
-  inputBg: '#F9FAFB',
-  inputBorder: '#E5E7EB',
-  cardElev: '#FFFFFF',
-};
+const STORAGE_MODE = 'themeMode:v1';
+const STORAGE_DENSITY = 'themeDensity:v1';
 
-const DARK: Palette = {
-  background: '#0B0F13',
-  surface: '#12171D',
-  card: '#12171D',
-  text: '#F3F4F6',
-  subtext: '#A7AFB8',
-  border: '#1F2937',
-  brand: '#22C55E',
-  danger: '#F87171',
-  warn: '#F59E0B',
-  focus: '#60A5FA',
-  inputBg: '#1A2129',
-  inputBorder: '#253041',
-  cardElev: '#12171D',
-};
+function mapTokensToPalette(isDark: boolean): Palette {
+  const t = isDark ? DARK_TOKENS : LIGHT_TOKENS;
+
+  const inputBg = isDark ? '#1A2129' : '#F9FAFB';
+  const inputBorder = isDark ? t.border || '#253041' : t.border || '#E5E7EB';
+  const cardElev = t.surface || (isDark ? '#11161A' : '#FFFFFF');
+
+  return {
+    background: t.background ?? t.bg ?? (isDark ? '#0B0F13' : '#F8F5EF'),
+    surface: t.surface ?? t.card ?? (isDark ? '#11161A' : '#FFFFFF'),
+    card: t.card ?? t.surface ?? (isDark ? '#11161A' : '#FFFFFF'),
+    text: t.text ?? (isDark ? '#E5E7EB' : '#111827'),
+    subtext: t.subtext ?? (isDark ? '#9CA3AF' : '#6B7280'),
+    border: t.border ?? (isDark ? '#27323A' : '#E5E7EB'),
+    brand: t.brand ?? (isDark ? '#22C55E' : '#166534'),
+    danger: t.danger ?? (isDark ? '#EF4444' : '#B91C1C'),
+    warn: t.warn ?? (isDark ? '#F59E0B' : '#92400E'),
+    focus: t.focus ?? (isDark ? '#60A5FA' : '#2563EB'),
+    inputBg,
+    inputBorder,
+    cardElev,
+  };
+}
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  // Start as not ready to avoid rendering with the wrong theme
   const [ready, setReady] = useState(false);
 
-  // Default to system scheme if no stored pref exists
   const system: ColorSchemeName = Appearance.getColorScheme();
   const systemDefault: 'light' | 'dark' = system === 'dark' ? 'dark' : 'light';
-
   const [mode, setModeState] = useState<'light' | 'dark'>(systemDefault);
 
-  // Hydrate from storage
+  const [density, setDensityState] = useState<'comfortable' | 'compact'>('comfortable');
+
   useEffect(() => {
     (async () => {
       try {
-        const saved = await AsyncStorage.getItem(STORAGE_KEY);
-        if (saved === 'light' || saved === 'dark') {
-          setModeState(saved);
-        } else {
-          setModeState(systemDefault);
+        const [savedMode, savedDensity] = await Promise.all([
+          AsyncStorage.getItem(STORAGE_MODE),
+          AsyncStorage.getItem(STORAGE_DENSITY),
+        ]);
+        if (savedMode === 'light' || savedMode === 'dark') setModeState(savedMode);
+        else setModeState(systemDefault);
+
+        if (savedDensity === 'comfortable' || savedDensity === 'compact') {
+          setDensityState(savedDensity);
         }
-      } catch {
-        setModeState(systemDefault);
       } finally {
         setReady(true);
       }
     })();
   }, [systemDefault]);
 
-  // Persist on change
   const setMode = React.useCallback(async (m: 'light' | 'dark') => {
     setModeState(m);
     try {
-      await AsyncStorage.setItem(STORAGE_KEY, m);
+      await AsyncStorage.setItem(STORAGE_MODE, m);
     } catch {}
   }, []);
 
-  const colors = mode === 'dark' ? DARK : LIGHT;
+  const setDensity = React.useCallback(async (d: 'comfortable' | 'compact') => {
+    setDensityState(d);
+    try {
+      await AsyncStorage.setItem(STORAGE_DENSITY, d);
+    } catch {}
+  }, []);
+
+  const colors = useMemo(() => mapTokensToPalette(mode === 'dark'), [mode]);
+
+  const spacingScale = density === 'compact' ? spacingCompactScale : spacingComfortable;
 
   const navTheme: NavTheme = useMemo(
     () => ({
@@ -120,12 +131,21 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   );
 
   const value = useMemo(
-    () => ({ ready, mode, colors, navTheme, setMode }),
-    [ready, mode, colors, navTheme, setMode]
+    () => ({
+      ready,
+      mode,
+      colors,
+      navTheme,
+      setMode,
+
+      density,
+      setDensity,
+      spacingScale,
+    }),
+    [ready, mode, colors, navTheme, setMode, density, setDensity, spacingScale]
   );
 
   if (!ready) return null;
-
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
 }
 
