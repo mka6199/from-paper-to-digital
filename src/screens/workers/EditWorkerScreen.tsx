@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Alert, View, Text } from 'react-native';
+import { Alert, View, Text, Platform } from 'react-native';
 import Screen from '../../components/layout/Screen';
 import AppHeader from '../../components/layout/AppHeader';
 import TextField from '../../components/primitives/TextField';
@@ -27,7 +27,7 @@ export default function EditWorkerScreen({ route, navigation }: any) {
       setRole(w.role ?? '');
       const s = Number(w.monthlySalaryAED ?? w.baseSalary ?? 0);
       setSalary(s ? String(s) : '');
-      setStatus((w.status as any) ?? 'active'); 
+      setStatus((w.status as any) ?? 'active');
     });
     return () => unsub && unsub();
   }, [effectiveId]);
@@ -69,7 +69,16 @@ export default function EditWorkerScreen({ route, navigation }: any) {
     }
   }
 
-  function confirm(title: string, msg: string, onYes: () => void) {
+  /**
+   * Confirmation helper:
+   * - On web: run the action immediately (no popup).
+   * - On native: show a confirmation Alert.
+   */
+  function confirmOrRun(onYes: () => void, title: string, msg: string) {
+    if (Platform.OS === 'web') {
+      onYes();
+      return;
+    }
     Alert.alert(title, msg, [
       { text: 'Cancel', style: 'cancel' },
       { text: 'OK', style: 'destructive', onPress: onYes },
@@ -77,9 +86,7 @@ export default function EditWorkerScreen({ route, navigation }: any) {
   }
 
   async function markFormer() {
-    confirm(
-      'Mark as Former',
-      'This will move the worker into Former status. They will stop appearing in Active lists.',
+    confirmOrRun(
       async () => {
         try {
           await updateWorker(effectiveId, { status: 'former', terminatedAt: new Date() as any });
@@ -87,14 +94,14 @@ export default function EditWorkerScreen({ route, navigation }: any) {
         } catch (e: any) {
           Alert.alert('Action failed', e?.message ?? 'Could not update status.');
         }
-      }
+      },
+      'Mark as Former',
+      'This will move the worker into Former status. They will stop appearing in Active lists.'
     );
   }
 
   async function restoreActive() {
-    confirm(
-      'Restore to Active',
-      'This will move the worker back to Active status.',
+    confirmOrRun(
       async () => {
         try {
           await updateWorker(effectiveId, { status: 'active', terminatedAt: null as any });
@@ -102,7 +109,9 @@ export default function EditWorkerScreen({ route, navigation }: any) {
         } catch (e: any) {
           Alert.alert('Action failed', e?.message ?? 'Could not update status.');
         }
-      }
+      },
+      'Restore to Active',
+      'This will move the worker back to Active status.'
     );
   }
 

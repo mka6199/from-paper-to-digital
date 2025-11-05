@@ -85,7 +85,15 @@ export default function SettingsScreen({ navigation }: any) {
     parent?.dispatch?.(CommonActions.reset({ index: 0, routes: [{ name: 'Auth' }] }));
   }, [navigation]);
 
-  function onLogout() {
+  async function onLogout() {
+    if (Platform.OS === 'web') {
+      try {
+        await signOut();
+        resetToAuth();
+        setTimeout(resetToAuth, 0);
+      } catch {}
+      return;
+    }
     Alert.alert('Log Out', 'Are you sure you want to log out?', [
       { text: 'Cancel', style: 'cancel' },
       {
@@ -232,7 +240,9 @@ export default function SettingsScreen({ navigation }: any) {
               <Text style={[styles.itemText, { color: colors.text }]}>Full Name</Text>
             </View>
             <Text style={{ color: colors.subtext, fontSize: 14 }} numberOfLines={1}>
-              {displayName}
+              {(profile?.firstName
+                ? `${profile.firstName}${profile?.lastName ? ' ' + profile.lastName : ''}`
+                : '') || profile?.email || 'User'}
             </Text>
           </View>
         </View>
