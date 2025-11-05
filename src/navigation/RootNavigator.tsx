@@ -2,7 +2,9 @@ import React from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import { Pressable, StyleSheet } from 'react-native';
+import { StyleSheet } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { colors as staticTokens } from '../theme/tokens';
 
 import DashboardScreen from '../screens/DashboardScreen';
 import WorkersStack from './WorkersStack';
@@ -12,13 +14,11 @@ import AuthStack from './AuthStack';
 import AdminStack from './AdminStack';
 import SettingsScreen from '../screens/SettingsScreen';
 import ProfileScreen from '../screens/ProfileScreen';
+import SplashScreen from '../screens/SplashScreen';
 
-import { Ionicons } from '@expo/vector-icons';
-import { colors as staticTokens } from '../theme/tokens';
-
-import { getAuth, onAuthStateChanged } from 'firebase/auth';
-import { navRef, onNavContainerReady, resetToAdmin, resetToAuth, resetToMain } from './nav';
+import { navRef, onNavContainerReady, resetOnce } from './nav';
 import { useTheme } from '../theme/ThemeProvider';
+import { AuthContext } from '../context/AuthProvider';
 
 const Tab = createBottomTabNavigator();
 const RootStack = createNativeStackNavigator();
@@ -52,9 +52,7 @@ function UserTabs() {
         name="Dashboard"
         component={DashboardScreen}
         options={{
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="home-outline" size={size} color={color} />
-          ),
+          tabBarIcon: ({ color, size }) => (<Ionicons name="home-outline" size={size} color={color} />),
           tabBarLabel: 'Dashboard',
           tabBarItemStyle: { width: 90, alignItems: 'flex-start', marginLeft: 10 },
         }}
@@ -63,9 +61,7 @@ function UserTabs() {
         name="Workers"
         component={WorkersStack}
         options={{
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="people-outline" size={size} color={color} />
-          ),
+          tabBarIcon: ({ color, size }) => (<Ionicons name="people-outline" size={size} color={color} />),
           tabBarLabel: 'Workers',
         }}
       />
@@ -73,9 +69,7 @@ function UserTabs() {
         name="History"
         component={HistoryStack}
         options={{
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="time-outline" size={size} color={color} />
-          ),
+          tabBarIcon: ({ color, size }) => (<Ionicons name="time-outline" size={size} color={color} />),
           tabBarLabel: 'History',
         }}
       />
@@ -83,9 +77,7 @@ function UserTabs() {
         name="Settings"
         component={SettingsScreen}
         options={{
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="settings-outline" size={size} color={color} />
-          ),
+          tabBarIcon: ({ color, size }) => (<Ionicons name="settings-outline" size={size} color={color} />),
           tabBarLabel: 'Settings',
           tabBarItemStyle: { alignItems: 'flex-end', marginRight: 10 },
         }}
@@ -93,30 +85,10 @@ function UserTabs() {
       <Tab.Screen
         name="Profile"
         component={ProfileScreen}
-        options={({ navigation }) => ({
-          tabBarButton: () => null,
-          headerShown: true,
-          title: 'Profile',
-          headerLeft: () => (
-            <Pressable
-              onPress={() => navigation.navigate('Settings')}
-              style={{ paddingHorizontal: 12 }}
-              accessibilityRole="button"
-              accessibilityLabel="Back to Settings"
-            >
-              <Ionicons name="chevron-back" size={24} color={staticTokens.text} />
-            </Pressable>
-          ),
-          tabBarItemStyle: { flex: 1, flexBasis: 0 },
-        })}
-      />
-      <Tab.Screen
-        name="Auth"
-        component={AuthStack}
         options={{
           tabBarButton: () => null,
           headerShown: false,
-          tabBarItemStyle: { display: 'none' as any },
+          tabBarItemStyle: { flex: 1, flexBasis: 0 },
         }}
       />
     </Tab.Navigator>
@@ -127,6 +99,7 @@ function AdminTabs() {
   const { colors } = useTheme();
   return (
     <Tab.Navigator
+      initialRouteName="Admin Panel"
       screenOptions={{
         headerShown: false,
         tabBarLabelPosition: 'below-icon',
@@ -149,73 +122,11 @@ function AdminTabs() {
       }}
     >
       <Tab.Screen
-        name="Dashboard"
-        component={DashboardScreen}
-        options={{
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="home-outline" size={size} color={color} />
-          ),
-          tabBarLabel: 'Dashboard',
-          tabBarItemStyle: { width: 90, alignItems: 'flex-start', marginLeft: 10 },
-        }}
-      />
-      <Tab.Screen
-        name="Workers"
+        name="Admin Panel"
         component={AdminStack}
         options={{
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="people-outline" size={size} color={color} />
-          ),
-          tabBarLabel: 'Workers',
-        }}
-      />
-      <Tab.Screen
-        name="History"
-        component={HistoryStack}
-        options={{
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="time-outline" size={size} color={color} />
-          ),
-          tabBarLabel: 'History',
-        }}
-      />
-      <Tab.Screen
-        name="Settings"
-        component={SettingsScreen}
-        options={{
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="settings-outline" size={size} color={color} />
-          ),
-          tabBarLabel: 'Settings',
-          tabBarItemStyle: { alignItems: 'flex-end', marginRight: 10 },
-        }}
-      />
-      <Tab.Screen
-        name="Profile"
-        component={ProfileScreen}
-        options={({ navigation }) => ({
-          tabBarButton: () => null,
-          headerShown: true,
-          title: 'Profile',
-          headerLeft: () => (
-            <Pressable
-              onPress={() => navigation.navigate('Settings')}
-              style={{ paddingHorizontal: 12 }}
-              accessibilityRole="button"
-              accessibilityLabel="Back to Settings"
-            >
-              <Ionicons name="chevron-back" size={24} color={staticTokens.text} />
-            </Pressable>
-          ),
-        })}
-      />
-      <Tab.Screen
-        name="Auth"
-        component={AuthStack}
-        options={{
-          tabBarButton: () => null,
-          headerShown: false,
-          tabBarItemStyle: { display: 'none' as any },
+          tabBarIcon: ({ color, size }) => (<Ionicons name="people-outline" size={size} color={color} />),
+          tabBarLabel: 'Admin Panel',
         }}
       />
     </Tab.Navigator>
@@ -224,26 +135,55 @@ function AdminTabs() {
 
 export default function RootNavigator() {
   const { navTheme } = useTheme();
-  const [authed, setAuthed] = React.useState<boolean | null>(null);
-  const [isAdmin, setIsAdmin] = React.useState(false);
+  const { authReady, profileReady, user, isAdmin } = React.useContext(AuthContext);
 
+  // Only decide once per change
+  const last = React.useRef<string | null>(null);
+
+  // Decide the root screen whenever the *combined* readiness changes
   React.useEffect(() => {
-    const unsub = onAuthStateChanged(getAuth(), async (user) => {
-      if (!user) {
-        setAuthed(false);
-        resetToAuth();
-        return;
+    // Not yet sure if signed-in or not → stay on Splash
+    if (!authReady) {
+      if (last.current !== 'Splash') {
+        resetOnce('Splash');
+        last.current = 'Splash';
       }
-      setAuthed(true);
-      if (isAdmin) resetToAdmin();
-      else resetToMain();
-    });
-    return unsub;
-  }, [isAdmin]);
+      return;
+    }
+
+    // Signed out → Auth
+    if (!user) {
+      if (last.current !== 'Auth') {
+        resetOnce('Auth');
+        last.current = 'Auth';
+      }
+      return;
+    }
+
+    // Signed in but profile not ready yet → Splash (prevents any Main flicker)
+    if (!profileReady) {
+      if (last.current !== 'Splash') {
+        resetOnce('Splash');
+        last.current = 'Splash';
+      }
+      return;
+    }
+
+    // Signed in with profile → go to Admin or Main directly
+    const target = isAdmin ? 'Admin' : 'Main';
+    if (last.current !== target) {
+      resetOnce(target as any);
+      last.current = target;
+    }
+  }, [authReady, profileReady, user, isAdmin]);
 
   return (
     <NavigationContainer ref={navRef} onReady={onNavContainerReady} theme={navTheme}>
-      <RootStack.Navigator screenOptions={{ headerShown: false }} initialRouteName="Auth">
+      <RootStack.Navigator
+        screenOptions={{ headerShown: false, animation: 'none' }}
+        initialRouteName="Splash"
+      >
+        <RootStack.Screen name="Splash" component={SplashScreen} />
         <RootStack.Screen name="Auth" component={AuthStack} />
         <RootStack.Screen name="Main" component={UserTabs} />
         <RootStack.Screen name="Admin" component={AdminTabs} />

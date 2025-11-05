@@ -1,4 +1,3 @@
-// src/screens/admin/AdminEditPaymentScreen.tsx
 import React from 'react';
 import { View, Alert } from 'react-native';
 import Screen from '../../components/layout/Screen';
@@ -12,6 +11,7 @@ import { doc, getDoc, Timestamp } from 'firebase/firestore';
 import { adminUpdatePayment } from '../../services/admin';
 import { deletePayment } from '../../services/payments';
 import AdminGate from '../../components/admin/AdminGate';
+import { useTheme } from '../../theme/ThemeProvider';
 
 const toYMD = (d: Date) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -25,6 +25,7 @@ function parseYMD(s?: string): Date | null {
 }
 
 export default function AdminEditPaymentScreen({ route, navigation }: any) {
+  const { colors } = useTheme();
   const { paymentId } = route.params as { paymentId: string };
 
   const [loading, setLoading] = React.useState(true);
@@ -103,7 +104,7 @@ export default function AdminEditPaymentScreen({ route, navigation }: any) {
           onPress: async () => {
             try {
               setDeleting(true);
-              await deletePayment(paymentId); 
+              await deletePayment(paymentId);
               navigation.goBack();
             } catch (e: any) {
               Alert.alert('Delete failed', e?.message ?? 'Could not delete payment.');
@@ -120,7 +121,7 @@ export default function AdminEditPaymentScreen({ route, navigation }: any) {
     <AdminGate title="Admin Panel">
       <Screen scroll padded>
         <AppHeader title="Admin • Edit Payment" onBack={() => navigation.goBack()} />
-        <Card>
+        <Card style={{ borderColor: colors.border, backgroundColor: colors.surface }}>
           <View style={{ gap: spacing.md }}>
             <TextField label="Amount (AED)" value={amount} onChangeText={setAmount} keyboardType="numeric" />
             <TextField label="Bonus (AED)" value={bonus} onChangeText={setBonus} keyboardType="numeric" />

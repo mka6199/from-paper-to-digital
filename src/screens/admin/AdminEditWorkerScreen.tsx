@@ -8,9 +8,11 @@ import Button from '../../components/primitives/Button';
 import { spacing } from '../../theme/tokens';
 import { getWorker } from '../../services/workers';
 import { adminUpdateWorker } from '../../services/admin';
-import AdminGate from '../../components/admin/AdminGate'
+import AdminGate from '../../components/admin/AdminGate';
+import { useTheme } from '../../theme/ThemeProvider';
 
 export default function AdminEditWorkerScreen({ route, navigation }: any) {
+  const { colors } = useTheme();
   const { workerId } = route.params as { workerId: string };
   const [loading, setLoading] = React.useState(true);
   const [name, setName] = React.useState('');
@@ -60,7 +62,7 @@ export default function AdminEditWorkerScreen({ route, navigation }: any) {
     <AdminGate title="Admin Panel">
       <Screen scroll padded>
         <AppHeader title="Admin • Edit Worker" onBack={() => navigation.goBack()} />
-        <Card>
+        <Card style={{ borderColor: colors.border, backgroundColor: colors.surface }}>
           <View style={{ gap: spacing.md }}>
             <TextField label="Full name" value={name} onChangeText={setName} />
             <TextField label="Role" value={role} onChangeText={setRole} />

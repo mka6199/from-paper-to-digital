@@ -1,12 +1,17 @@
+// WorkerProfileScreen.tsx (theme-aware)
 import React from 'react';
 import { Text, View } from 'react-native';
 import Screen from '../../components/layout/Screen';
 import AppHeader from '../../components/layout/AppHeader';
 import Button from '../../components/primitives/Button';
 import Card from '../../components/primitives/Card';
-import { colors, spacing, typography } from '../../theme/tokens';
+import { spacing, typography } from '../../theme/tokens';
 import { getWorker } from '../../services/workers';
 import { useFocusEffect, useRoute } from '@react-navigation/native';
+import { useTheme } from '../../theme/ThemeProvider';
+
+// ✅ ADDED currency (without removing your original salary logic)
+import { useCurrency } from '../../context/CurrencyProvider';
 
 type WorkerLike = {
   id: string;
@@ -39,6 +44,9 @@ const initials = (name?: string) =>
 
 export default function WorkerProfileScreen({ navigation }: any) {
   const route = useRoute<any>();
+  const { colors } = useTheme();
+  const { format } = useCurrency(); // ✅ ADDED
+
   const { id, worker: initialWorker } = (route?.params ?? {}) as {
     id: string;
     worker?: WorkerLike;
@@ -71,7 +79,8 @@ export default function WorkerProfileScreen({ navigation }: any) {
   }, [route?.params]);
 
   const monthly = getMonthlySalary(w);
-  const salaryLabel = monthly > 0 ? `${monthly.toLocaleString()} AED` : '— AED';
+  const salaryLabel = monthly > 0 ? `${monthly.toLocaleString()} AED` : '— AED'; // (kept)
+  const salaryLabelConverted = format(monthly); // ✅ ADDED
 
   return (
     <Screen>
@@ -94,10 +103,22 @@ export default function WorkerProfileScreen({ navigation }: any) {
             </Text>
           </View>
 
-          <Text style={typography.h2}>{w?.name || '—'}</Text>
-          {!!w?.role && <Text style={typography.small}>{w.role}</Text>}
-          <Text style={[typography.small, { color: colors.subtext, marginTop: spacing.sm }]}>
-            Monthly Salary: {salaryLabel}
+          <Text style={[typography.h2, { color: colors.text }]}>
+            {w?.name || '—'}
+          </Text>
+          {!!w?.role && (
+            <Text style={[typography.small, { color: colors.subtext }]}>
+              {w.role}
+            </Text>
+          )}
+          <Text
+            style={[
+              typography.small,
+              { color: colors.subtext, marginTop: spacing.sm },
+            ]}
+          >
+            {/* show converted first, but keep your original label as fallback */}
+            Monthly Salary: {salaryLabelConverted || salaryLabel} {/* ✅ ADDED */}
           </Text>
         </View>
       </Card>

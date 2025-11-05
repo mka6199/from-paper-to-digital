@@ -13,20 +13,35 @@ import {
   orderBy,
 } from 'firebase/firestore';
 
+/**
+ * Expand AdminUser to include profile fields we edit in AdminUsersScreen.
+ * All optional except uid, role. Keep email optional to tolerate partial docs.
+ */
 export type AdminUser = {
   uid: string;
-  email: string;
+  email?: string;
   role: 'user' | 'admin';
   isActive?: boolean;
+
+  // profile fields editable from admin UI
+  firstName?: string;
+  lastName?: string;
+  phone?: string;
+  dobYMD?: string; // YYYY-MM-DD
+
+  // audit fields (Firestore Timestamps or similar)
   createdAt?: any;
   updatedAt?: any;
   lastActiveAt?: any;
 };
 
+/** Allow flexible patching of user docs (subset of AdminUser + extra metadata if needed). */
+export type UserDocPatch = Partial<AdminUser> & Record<string, any>;
+
 export function subscribeAllUsers(cb: (rows: AdminUser[]) => void): () => void {
   const colRef = collection(db, 'users');
-  const q = query(colRef);
-  return onSnapshot(q, (snap) => {
+  const qy = query(colRef);
+  return onSnapshot(qy, (snap) => {
     const rows = snap.docs.map((d) => ({ uid: d.id, ...(d.data() as any) })) as AdminUser[];
     rows.sort((a, b) => (b?.createdAt?.seconds ?? 0) - (a?.createdAt?.seconds ?? 0));
     cb(rows);
@@ -35,8 +50,8 @@ export function subscribeAllUsers(cb: (rows: AdminUser[]) => void): () => void {
 
 export async function findUserByEmail(email: string): Promise<AdminUser | null> {
   const colRef = collection(db, 'users');
-  const q = query(colRef, where('email', '==', email.trim().toLowerCase()));
-  const snap = await getDocs(q);
+  const qy = query(colRef, where('email', '==', email.trim().toLowerCase()));
+  const snap = await getDocs(qy);
   if (snap.empty) return null;
   const d = snap.docs[0];
   return { uid: d.id, ...(d.data() as any) } as AdminUser;
@@ -58,7 +73,8 @@ export async function setUserActive(uid: string, isActive: boolean) {
   await updateDoc(doc(db, 'users', uid), { isActive, updatedAt: Timestamp.now() });
 }
 
-export async function updateUserDoc(uid: string, patch: Partial<AdminUser>) {
+/** Loosen patch type so firstName/lastName/phone/dobYMD (etc.) are accepted. */
+export async function updateUserDoc(uid: string, patch: UserDocPatch) {
   await ensureAuth();
   await updateDoc(doc(db, 'users', uid), { ...patch, updatedAt: Timestamp.now() } as any);
 }
@@ -67,6 +83,8 @@ export async function adminDeleteUserDoc(uid: string) {
   await ensureAuth();
   await deleteDoc(doc(db, 'users', uid));
 }
+
+/* ---------- Workers ---------- */
 
 export function subscribeAllWorkers(cb: (rows: any[]) => void): () => void {
   const colRef = collection(db, 'workers');
@@ -99,6 +117,8 @@ export async function adminDeleteWorker(workerId: string) {
   await deleteDoc(doc(db, 'workers', workerId));
 }
 
+/* ---------- Payments ---------- */
+
 export function subscribeAllPayments(cb: (rows: any[]) => void): () => void {
   const colRef = collection(db, 'payments');
   const qy = query(colRef, orderBy('paidAt', 'desc'));
@@ -127,6 +147,8 @@ export async function adminDeletePayment(paymentId: string) {
   await ensureAuth();
   await deleteDoc(doc(db, 'payments', paymentId));
 }
+
+/* ---------- Delete user & data helpers ---------- */
 
 async function deleteByOwner(collectionName: 'workers' | 'payments', ownerUid: string) {
   const qy = query(collection(db, collectionName), where('ownerUid', '==', ownerUid));

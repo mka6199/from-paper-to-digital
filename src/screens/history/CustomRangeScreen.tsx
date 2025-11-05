@@ -6,6 +6,7 @@ import Card from '../../components/primitives/Card';
 import TextField from '../../components/primitives/TextField';
 import Button from '../../components/primitives/Button';
 import { spacing, typography } from '../../theme/tokens';
+import { useTheme } from '../../theme/ThemeProvider';
 
 function parseYMD(s: string): Date | null {
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s.trim());
@@ -16,6 +17,7 @@ function parseYMD(s: string): Date | null {
 }
 
 export default function CustomRangeScreen({ route, navigation }: any) {
+  const { colors } = useTheme();
   const p = (route?.params ?? {}) as { startISO?: string; endISO?: string };
   const [startTxt, setStartTxt] = React.useState(p.startISO ? p.startISO.slice(0, 10) : '');
   const [endTxt, setEndTxt] = React.useState(p.endISO ? p.endISO.slice(0, 10) : '');
@@ -37,10 +39,13 @@ export default function CustomRangeScreen({ route, navigation }: any) {
 
   return (
     <Screen scroll padded>
-      <AppHeader title="Custom Range" onBack={() => navigation.goBack()} />
+      {/* AppHeader in your app doesn’t take onBack; omit it */}
+      <AppHeader title="Custom Range" />
       <Card>
         <View style={{ gap: spacing.md }}>
-          <Text style={typography.small}>Enter dates as YYYY-MM-DD</Text>
+          <Text style={[typography.small, { color: colors.subtext }]}>
+            Enter dates as YYYY-MM-DD
+          </Text>
           <TextField
             label="Start date"
             value={startTxt}

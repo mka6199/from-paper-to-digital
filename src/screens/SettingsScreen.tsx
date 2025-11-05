@@ -1,3 +1,4 @@
+// src/screens/SettingsScreen.tsx
 import React from 'react';
 import {
   View,
@@ -13,7 +14,7 @@ import {
 } from 'react-native';
 import { CommonActions } from '@react-navigation/native';
 import Screen from '../components/layout/Screen';
-import { colors as staticTokens, spacing, typography } from '../theme/tokens';
+import { spacing, typography } from '../theme/tokens';
 import AppHeader from '../components/layout/AppHeader';
 import { signOut } from '../../firebase';
 import { AuthContext } from '../context/AuthProvider';
@@ -21,37 +22,55 @@ import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
 import { useTheme } from '../theme/ThemeProvider';
+import { useCurrency } from '../context/CurrencyProvider'; // ✅ FIXED PATH
 
 export default function SettingsScreen({ navigation }: any) {
   const { profile } = React.useContext(AuthContext);
-  const { mode, setMode, colors } = useTheme();
+  const { colors, mode, setMode } = useTheme();
+
+  // ✅ currency context
+  const { currency, setCurrency, supported, format, symbols } = useCurrency();
+
   const [darkMode, setDarkMode] = React.useState(mode === 'dark');
   const [notificationsEnabled, setNotificationsEnabled] = React.useState(true);
   const [language, setLanguage] = React.useState<'English' | 'Arabic'>('English');
-  const [currency, setCurrency] = React.useState<'AED' | 'USD' | 'EUR' | 'GBP'>('AED');
+
+  // local UI state for the inline dropdown
+  const [showCurrencyDropdown, setShowCurrencyDropdown] = React.useState(false);
 
   React.useEffect(() => {
     (async () => {
       try {
-        const [ntf, lang, curr] = await Promise.all([
+        const [dm, ntf, lang, curr] = await Promise.all([
+          AsyncStorage.getItem('settings.darkMode'),
           AsyncStorage.getItem('settings.notifications'),
           AsyncStorage.getItem('settings.language'),
           AsyncStorage.getItem('settings.currency'),
         ]);
+        if (dm !== null) {
+          const on = dm === '1';
+          setDarkMode(on);
+          setMode(on ? 'dark' : 'light');
+        }
         if (ntf !== null) setNotificationsEnabled(ntf === '1');
-        if (lang === 'English' || lang === 'Arabic') setLanguage(lang);
-        if (curr === 'AED' || curr === 'USD' || curr === 'EUR' || curr === 'GBP') setCurrency(curr);
+        if (lang === 'English' || lang === 'Arabic') setLanguage(lang as any);
+
+        // If you stored a previous currency, sync it to the context (and vice-versa).
+        if (curr && supported.includes(curr as any)) {
+          setCurrency(curr as any);
+        }
       } catch {}
     })();
-  }, []);
-
-  React.useEffect(() => {
-    setDarkMode(mode === 'dark');
-  }, [mode]);
+  }, [setMode, setCurrency, supported]);
 
   const persist = React.useCallback(async (key: string, val: string) => {
     try { await AsyncStorage.setItem(key, val); } catch {}
   }, []);
+
+  // keep AsyncStorage in sync when currency changes via inline picker
+  React.useEffect(() => {
+    persist('settings.currency', currency);
+  }, [currency, persist]);
 
   const displayName =
     (profile?.firstName
@@ -93,6 +112,7 @@ export default function SettingsScreen({ navigation }: any) {
   const onToggleDark = (v: boolean) => {
     setDarkMode(v);
     setMode(v ? 'dark' : 'light');
+    persist('settings.darkMode', v ? '1' : '0');
   };
   const onToggleNotifications = (v: boolean) => {
     setNotificationsEnabled(v);
@@ -121,14 +141,15 @@ export default function SettingsScreen({ navigation }: any) {
     }
   };
 
+  // ⬇️ keep your original ActionSheet flow (nothing removed)
   const pickCurrency = () => {
-    const options = ['AED', 'USD', 'EUR', 'GBP', 'Cancel'] as const;
+    const options = [...supported, 'Cancel'] as const;
     if (Platform.OS === 'ios') {
       ActionSheetIOS.showActionSheetWithOptions(
-        { options: options as unknown as string[], cancelButtonIndex: 4 },
+        { options: options as unknown as string[], cancelButtonIndex: options.length - 1 },
         (idx) => {
-          if (idx === 0 || idx === 1 || idx === 2 || idx === 3) {
-            const choice = options[idx] as 'AED' | 'USD' | 'EUR' | 'GBP';
+          if (idx != null && idx >= 0 && idx < options.length - 1) {
+            const choice = options[idx] as typeof supported[number];
             setCurrency(choice);
             persist('settings.currency', choice);
           }
@@ -136,10 +157,10 @@ export default function SettingsScreen({ navigation }: any) {
       );
     } else {
       Alert.alert('Currency Format', 'Choose your currency', [
-        { text: 'AED', onPress: () => { setCurrency('AED'); persist('settings.currency', 'AED'); } },
-        { text: 'USD', onPress: () => { setCurrency('USD'); persist('settings.currency', 'USD'); } },
-        { text: 'EUR', onPress: () => { setCurrency('EUR'); persist('settings.currency', 'EUR'); } },
-        { text: 'GBP', onPress: () => { setCurrency('GBP'); persist('settings.currency', 'GBP'); } },
+        ...supported.map((c) => ({
+          text: c,
+          onPress: () => { setCurrency(c); persist('settings.currency', c); },
+        })),
         { text: 'Cancel', style: 'cancel' },
       ]);
     }
@@ -167,48 +188,52 @@ export default function SettingsScreen({ navigation }: any) {
     else Alert.alert('Privacy Policy', 'Privacy page is not configured yet.');
   };
 
+  // ---------- UI ----------
   return (
     <Screen>
+      <AppHeader title="Settings" />
       <ScrollView
         style={[styles.container, { backgroundColor: colors.background }]}
         contentContainerStyle={{ paddingBottom: spacing['2xl'] }}
       >
-        <View style={[styles.section, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+        {/* Account */}
+        <View style={[styles.section, { borderColor: colors.border, backgroundColor: colors.surface }]}>
           <Text style={[styles.sectionTitle, { color: colors.subtext }]}>Account</Text>
 
-          <Pressable style={[styles.item, { borderColor: colors.border }]} onPress={() => navigation.navigate('Profile')}>
+          <Pressable style={styles.item} onPress={() => navigation.navigate('Profile')}>
             <View style={styles.itemLeft}>
               <Ionicons name="person-circle-outline" size={22} color={colors.brand} />
               <Text style={[styles.itemText, { color: colors.text }]}>Profile Information</Text>
             </View>
-            <Ionicons name="chevron-forward" size={18} color="#9ca3af" />
+            <Ionicons name="chevron-forward" size={18} color={colors.subtext} />
           </Pressable>
 
-          <View style={[styles.item, { justifyContent: 'space-between', borderColor: colors.border }]}>
+          <View style={[styles.item, { justifyContent: 'space-between' }]}>
             <View style={styles.itemLeft}>
               <Ionicons name="mail-outline" size={22} color={colors.brand} />
               <Text style={[styles.itemText, { color: colors.text }]}>Email</Text>
             </View>
-            <Text style={[typography.small, { color: colors.subtext }]} numberOfLines={1}>
+            <Text style={[styles.small, { color: colors.subtext }]} numberOfLines={1}>
               {profile?.email}
             </Text>
           </View>
 
-          <View style={[styles.item, { justifyContent: 'space-between', borderColor: colors.border }]}>
+          <View style={[styles.item, { justifyContent: 'space-between' }]}>
             <View style={styles.itemLeft}>
               <Ionicons name="id-card-outline" size={22} color={colors.brand} />
               <Text style={[styles.itemText, { color: colors.text }]}>Full Name</Text>
             </View>
-            <Text style={[typography.small, { color: colors.subtext }]} numberOfLines={1}>
-              {(profile?.firstName && profile?.lastName) ? `${profile.firstName} ${profile.lastName}` : (profile?.firstName || profile?.email || 'User')}
+            <Text style={[styles.small, { color: colors.subtext }]} numberOfLines={1}>
+              {displayName}
             </Text>
           </View>
         </View>
 
-        <View style={[styles.section, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+        {/* Preferences */}
+        <View style={[styles.section, { borderColor: colors.border, backgroundColor: colors.surface }]}>
           <Text style={[styles.sectionTitle, { color: colors.subtext }]}>Preferences</Text>
 
-          <View style={[styles.item, styles.switchItem, { borderColor: colors.border }]}>
+          <View style={[styles.item, styles.switchItem]}>
             <View style={styles.itemLeft}>
               <Ionicons name="moon-outline" size={22} color={colors.brand} />
               <Text style={[styles.itemText, { color: colors.text }]}>Dark Mode</Text>
@@ -216,11 +241,12 @@ export default function SettingsScreen({ navigation }: any) {
             <Switch
               value={darkMode}
               onValueChange={onToggleDark}
-              trackColor={{ false: '#ccc', true: staticTokens.brand }}
+              trackColor={{ false: colors.border, true: colors.brand }}
+              thumbColor={darkMode ? colors.brand : '#fff'}
             />
           </View>
 
-          <View style={[styles.item, styles.switchItem, { borderColor: colors.border }]}>
+          <View style={[styles.item, styles.switchItem]}>
             <View style={styles.itemLeft}>
               <Ionicons name="notifications-outline" size={22} color={colors.brand} />
               <Text style={[styles.itemText, { color: colors.text }]}>Push Notifications</Text>
@@ -228,61 +254,145 @@ export default function SettingsScreen({ navigation }: any) {
             <Switch
               value={notificationsEnabled}
               onValueChange={onToggleNotifications}
-              trackColor={{ false: '#ccc', true: staticTokens.brand }}
+              trackColor={{ false: colors.border, true: colors.brand }}
+              thumbColor={notificationsEnabled ? colors.brand : '#fff'}
             />
           </View>
 
-          <Pressable style={[styles.item, { borderColor: colors.border }]} onPress={pickLanguage}>
+          <Pressable style={styles.item} onPress={pickLanguage}>
             <View style={styles.itemLeft}>
               <Ionicons name="globe-outline" size={22} color={colors.brand} />
               <Text style={[styles.itemText, { color: colors.text }]}>Language</Text>
             </View>
             <View style={styles.itemLeft}>
-              <Text style={[typography.small, { color: colors.subtext }]}>{language}</Text>
-              <Ionicons name="chevron-forward" size={18} color="#9ca3af" />
+              <Text style={[styles.small, { color: colors.subtext }]}>{language}</Text>
+              <Ionicons name="chevron-forward" size={18} color={colors.subtext} />
             </View>
           </Pressable>
 
-          <Pressable style={[styles.item, { borderColor: colors.border }]} onPress={pickCurrency}>
+          {/* Currency selector row (tap toggles inline dropdown) */}
+          <Pressable
+            style={styles.item}
+            onPress={() => setShowCurrencyDropdown((s) => !s)}
+            accessibilityRole="button"
+            accessibilityLabel="Change Currency Format"
+          >
             <View style={styles.itemLeft}>
               <Ionicons name="cash-outline" size={22} color={colors.brand} />
               <Text style={[styles.itemText, { color: colors.text }]}>Currency Format</Text>
             </View>
             <View style={styles.itemLeft}>
-              <Text style={[typography.small, { color: colors.subtext }]}>{currency}</Text>
-              <Ionicons name="chevron-forward" size={18} color="#9ca3af" />
+              <Text style={[styles.small, { color: colors.subtext }]}>{currency}</Text>
+              <Ionicons
+                name={showCurrencyDropdown ? 'chevron-up' : 'chevron-forward'}
+                size={18}
+                color={colors.subtext}
+              />
             </View>
           </Pressable>
+
+          {/* Inline dropdown panel (additive; keeps your ActionSheet pickCurrency too) */}
+          {showCurrencyDropdown && (
+            <View style={{ paddingHorizontal: spacing.lg, paddingBottom: spacing.md }}>
+              <View
+                style={{
+                  borderWidth: StyleSheet.hairlineWidth,
+                  borderColor: colors.border,
+                  backgroundColor: colors.surface,
+                  borderRadius: 12,
+                  overflow: 'hidden',
+                }}
+              >
+                {supported.map((c, idx) => {
+                  const isActive = c === currency;
+                  return (
+                    <Pressable
+                      key={c}
+                      onPress={() => {
+                        setCurrency(c);
+                        AsyncStorage.setItem('settings.currency', c).catch(() => {});
+                      }}
+                      style={({ pressed }) => [
+                        {
+                          paddingVertical: 12,
+                          paddingHorizontal: 12,
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          backgroundColor: isActive ? `${colors.focus}10` : colors.surface,
+                          borderTopWidth: idx === 0 ? 0 : StyleSheet.hairlineWidth,
+                          borderColor: colors.border,
+                        },
+                        pressed && { opacity: 0.9 },
+                      ]}
+                    >
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                        <Text style={{ color: colors.text, fontWeight: '600' }}>{c}</Text>
+                        <Text style={{ color: colors.subtext }}>
+                          {/* live preview: 100 AED -> converted */}
+                          {format(100, c as any)} {/* 100 AED sample */}
+                        </Text>
+                      </View>
+                      {isActive ? (
+                        <Ionicons name="checkmark-circle" size={18} color={colors.brand} />
+                      ) : (
+                        <Ionicons name="ellipse-outline" size={16} color={colors.border} />
+                      )}
+                    </Pressable>
+                  );
+                })}
+
+                {/* Fallback to your original ActionSheet flow if they prefer that UI */}
+                <Pressable
+                  onPress={pickCurrency}
+                  style={({ pressed }) => [
+                    {
+                      paddingVertical: 12,
+                      paddingHorizontal: 12,
+                      alignItems: 'center',
+                      borderTopWidth: StyleSheet.hairlineWidth,
+                      borderColor: colors.border,
+                    },
+                    pressed && { opacity: 0.9 },
+                  ]}
+                >
+                  <Text style={{ color: colors.subtext }}>More options…</Text>
+                </Pressable>
+              </View>
+            </View>
+          )}
         </View>
 
-        <View style={[styles.section, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+        {/* About */}
+        <View style={[styles.section, { borderColor: colors.border, backgroundColor: colors.surface }]}>
           <Text style={[styles.sectionTitle, { color: colors.subtext }]}>About</Text>
 
-          <Pressable style={[styles.item, { borderColor: colors.border }]} onPress={showAbout}>
+          <Pressable style={styles.item} onPress={showAbout}>
             <View style={styles.itemLeft}>
               <Ionicons name="information-circle-outline" size={22} color={colors.brand} />
               <Text style={[styles.itemText, { color: colors.text }]}>About This App</Text>
             </View>
-            <Ionicons name="chevron-forward" size={18} color="#9ca3af" />
+            <Ionicons name="chevron-forward" size={18} color={colors.subtext} />
           </Pressable>
 
-          <Pressable style={[styles.item, { borderColor: colors.border }]} onPress={openTerms}>
+          <Pressable style={styles.item} onPress={openTerms}>
             <View style={styles.itemLeft}>
               <Ionicons name="document-text-outline" size={22} color={colors.brand} />
               <Text style={[styles.itemText, { color: colors.text }]}>Terms & Conditions</Text>
             </View>
-            <Ionicons name="chevron-forward" size={18} color="#9ca3af" />
+            <Ionicons name="chevron-forward" size={18} color={colors.subtext} />
           </Pressable>
 
-          <Pressable style={[styles.item, { borderColor: colors.border }]} onPress={openPrivacy}>
+          <Pressable style={styles.item} onPress={openPrivacy}>
             <View style={styles.itemLeft}>
               <Ionicons name="shield-checkmark-outline" size={22} color={colors.brand} />
               <Text style={[styles.itemText, { color: colors.text }]}>Privacy Policy</Text>
             </View>
-            <Ionicons name="chevron-forward" size={18} color="#9ca3af" />
+            <Ionicons name="chevron-forward" size={18} color={colors.subtext} />
           </Pressable>
         </View>
 
+        {/* Logout */}
         <View style={[styles.section, { marginTop: spacing.xl, backgroundColor: colors.surface, borderColor: colors.border }]}>
           <Pressable
             onPress={onLogout}
@@ -298,7 +408,7 @@ export default function SettingsScreen({ navigation }: any) {
         </View>
 
         <View style={{ alignItems: 'center', paddingVertical: spacing.md }}>
-          <Text style={[typography.small, { color: colors.subtext }]}>
+          <Text style={[styles.small, { color: colors.subtext }]}>
             v{(Constants?.expoConfig as any)?.version || (Constants?.manifest as any)?.version || '1.0.0'}
           </Text>
         </View>
@@ -315,7 +425,6 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   sectionTitle: {
-    ...typography.small,
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.md,
     paddingBottom: spacing.xs,
@@ -335,8 +444,9 @@ const styles = StyleSheet.create({
     gap: spacing.md,
   },
   itemText: {
-    ...typography.body,
+    fontSize: 16,
   },
+  small: { fontSize: 14 },
   switchItem: {
     justifyContent: 'space-between',
   },

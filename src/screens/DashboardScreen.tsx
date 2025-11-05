@@ -12,7 +12,12 @@ import DashboardKPIs from '../components/dashboard/DashboardKPIs';
 import { getMyProfile } from '../services/profile';
 import { useTheme } from '../theme/ThemeProvider';
 
-const money = (n: number) => `${Math.round(n).toLocaleString()} AED`;
+// ✅ ADD: currency hook
+import { useCurrency } from '../context/CurrencyProvider';
+
+// keep the helper name but delegate to currency formatter (non-breaking)
+const moneyFactory = (format: (n: number) => string) => (n: number) => format(n);
+
 const addDays = (d: Date, days: number) => {
   const x = new Date(d);
   x.setDate(x.getDate() + days);
@@ -37,8 +42,8 @@ function matchesPaymentToWorker(p: Payment, w: Worker): boolean {
 
 type Totals = {
   workers: number;
-  dueThisMonth: number;
-  paidThisMonth: number;
+  dueThisMonth: number;   // stored in AED
+  paidThisMonth: number;  // stored in AED
   hasDueSoon: boolean;
   hasOverdue: boolean;
 };
@@ -46,6 +51,10 @@ type Totals = {
 export default function DashboardScreen({ navigation }: any) {
   const { colors } = useTheme();
   const { profile } = React.useContext(AuthContext);
+
+  // ✅ currency context
+  const { format } = useCurrency();
+  const money = React.useMemo(() => moneyFactory((n) => format(n)), [format]);
 
   const displayName =
     (profile?.firstName
@@ -164,8 +173,8 @@ export default function DashboardScreen({ navigation }: any) {
 
     setTotals({
       workers: workers.length,
-      dueThisMonth,
-      paidThisMonth,
+      dueThisMonth,    // keep AED internally
+      paidThisMonth,   // keep AED internally
       hasDueSoon,
       hasOverdue,
     });
@@ -239,7 +248,9 @@ export default function DashboardScreen({ navigation }: any) {
 
         <Card style={[styles.statCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
           <Text style={[styles.statLabel, { color: colors.subtext }]}>Paid this month</Text>
-          <Text style={[styles.statValue, { color: colors.text }]}>{money(totals.paidThisMonth)}</Text>
+          <Text style={[styles.statValue, { color: colors.text }]}>
+            {money(totals.paidThisMonth)}
+          </Text>
           <Button
             label="View history"
             variant="outline"

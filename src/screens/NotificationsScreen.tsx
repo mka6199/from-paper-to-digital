@@ -4,7 +4,7 @@ import Screen from '../components/layout/Screen';
 import AppHeader from '../components/layout/AppHeader';
 import Card from '../components/primitives/Card';
 import Button from '../components/primitives/Button';
-import { colors, spacing, typography } from '../theme/tokens';
+import { spacing } from '../theme/tokens';
 import {
   AppNotification,
   subscribeMyNotifications,
@@ -12,6 +12,7 @@ import {
   markAllNotificationsRead,
   deleteNotification,
 } from '../services/notifications';
+import { useTheme } from '../theme/ThemeProvider';
 
 const timeAgo = (d?: Date | null) => {
   if (!d) return '—';
@@ -26,6 +27,7 @@ const timeAgo = (d?: Date | null) => {
 };
 
 export default function NotificationsScreen({ navigation }: any) {
+  const { colors, mode } = useTheme();
   const [rows, setRows] = React.useState<AppNotification[]>([]);
   const [ready, setReady] = React.useState(false);
 
@@ -43,6 +45,41 @@ export default function NotificationsScreen({ navigation }: any) {
     return () => { if (unsub) unsub(); };
   }, []);
 
+  const styles = React.useMemo(() => StyleSheet.create({
+    row: {
+      padding: spacing.lg,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 16,
+      backgroundColor: colors.surface,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.md,
+    },
+    unread: {
+      borderColor: colors.brand,
+      backgroundColor: mode === 'dark' ? '#0f2417' : '#f5fff7',
+    },
+    title: {
+      fontSize: 16,
+      fontWeight: '700',
+      color: colors.text,
+    },
+    subtext: {
+      fontSize: 14,
+      color: colors.subtext,
+    },
+    empty: {
+      fontSize: 14,
+      textAlign: 'center',
+      color: colors.subtext,
+    },
+    headerWrap: { paddingHorizontal: spacing.lg },
+    headerActions: { alignItems: 'flex-end', marginBottom: spacing.md },
+    listContent: { padding: spacing.lg, gap: spacing.md, paddingBottom: spacing['2xl'] as any },
+    removeText: { fontSize: 14, color: colors.danger },
+  }), [colors, mode]);
+
   const renderItem = ({ item }: { item: AppNotification }) => {
     const dt = item.createdAt?.toDate ? item.createdAt.toDate() : null;
     const subtitle =
@@ -55,18 +92,16 @@ export default function NotificationsScreen({ navigation }: any) {
         <View style={{ flex: 1, gap: 4 }}>
           <Text style={styles.title} numberOfLines={1}>{item.title}</Text>
           {!!subtitle && (
-            <Text style={[typography.small, { color: colors.subtext }]} numberOfLines={1}>
-              {subtitle}
-            </Text>
+            <Text style={styles.subtext} numberOfLines={1}>{subtitle}</Text>
           )}
-          <Text style={[typography.small, { color: colors.subtext }]}>{timeAgo(dt)}</Text>
+          <Text style={styles.subtext}>{timeAgo(dt)}</Text>
         </View>
 
         <View style={{ gap: 8, alignItems: 'flex-end' }}>
           {item.isRead ? (
             <Button label="Mark unread" variant="soft" onPress={() => markNotificationRead(item.id!, false)} />
           ) : (
-            <Button label="Mark read" tone="green" onPress={() => markNotificationRead(item.id!, true)} />
+            <Button label="Mark read" onPress={() => markNotificationRead(item.id!, true)} />
           )}
           <Pressable onPress={() => {
             Alert.alert('Remove notification', 'Delete this notification?', [
@@ -74,7 +109,7 @@ export default function NotificationsScreen({ navigation }: any) {
               { text: 'Delete', style: 'destructive', onPress: () => deleteNotification(item.id!) },
             ]);
           }}>
-            <Text style={[typography.small, { color: colors.danger }]}>Remove</Text>
+            <Text style={styles.removeText}>Remove</Text>
           </Pressable>
         </View>
       </Card>
@@ -82,9 +117,9 @@ export default function NotificationsScreen({ navigation }: any) {
   };
 
   const header = (
-    <View style={{ paddingHorizontal: spacing.lg }}>
+    <View style={styles.headerWrap}>
       <AppHeader title="Notifications" />
-      <View style={{ alignItems: 'flex-end', marginBottom: spacing.md }}>
+      <View style={styles.headerActions}>
         <Button label="Mark all read" variant="outline" onPress={() => markAllNotificationsRead()} />
       </View>
     </View>
@@ -98,36 +133,11 @@ export default function NotificationsScreen({ navigation }: any) {
         renderItem={renderItem}
         ListHeaderComponent={header}
         ListEmptyComponent={
-          ready ? (
-            <Text style={[typography.small, { textAlign: 'center', color: colors.subtext }]}>
-              All caught up! No notifications.
-            </Text>
-          ) : null
+          ready ? <Text style={styles.empty}>All caught up! No notifications.</Text> : null
         }
-        contentContainerStyle={{ padding: spacing.lg, gap: spacing.md, paddingBottom: spacing['2xl'] }}
+        contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
       />
     </Screen>
   );
 }
-
-const styles = StyleSheet.create({
-  row: {
-    padding: spacing.lg,
-    borderWidth: 1,
-    borderColor: '#eee',
-    borderRadius: 16,
-    backgroundColor: '#fff',
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-  },
-  unread: {
-    borderColor: colors.brand,
-    backgroundColor: '#f5fff7',
-  },
-  title: {
-    ...typography.body,
-    fontWeight: '700',
-  } as any,
-});

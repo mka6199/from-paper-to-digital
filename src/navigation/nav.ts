@@ -16,17 +16,20 @@ export function onNavContainerReady() {
   }
 }
 
-function currentRoot(): string | undefined {
+export type RootRouteName = 'Splash' | 'Auth' | 'Main' | 'Admin';
+
+function currentRoot(): RootRouteName | undefined {
   try {
     const s = navRef.getRootState();
     const r = s?.routes?.[s.index ?? 0];
-    return r?.name;
+    return r?.name as RootRouteName | undefined;
   } catch {
     return undefined;
   }
 }
 
-function safeResetTo(name: 'Auth' | 'Main' | 'Admin') {
+/** Reset to a root route only if it's not already current */
+export function resetOnce(name: RootRouteName) {
   whenNavReady(() => {
     if (currentRoot() === name) return;
     navRef.dispatch(
@@ -38,6 +41,8 @@ function safeResetTo(name: 'Auth' | 'Main' | 'Admin') {
   });
 }
 
-export function resetToAuth()  { safeResetTo('Auth'); }
-export function resetToMain()  { safeResetTo('Main'); }
-export function resetToAdmin() { safeResetTo('Admin'); }
+// Back-compat helpers
+export function resetToAuth()  { resetOnce('Auth'); }
+export function resetToMain()  { resetOnce('Main'); }
+export function resetToAdmin() { resetOnce('Admin'); }
+export function resetToSplash(){ resetOnce('Splash'); }

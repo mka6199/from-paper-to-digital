@@ -1,6 +1,7 @@
 import React from 'react';
 import { ActivityIndicator, Pressable, Text, View, StyleSheet, ViewStyle } from 'react-native';
-import { colors, radii, spacing } from '../../theme/tokens';
+import { radii, spacing } from '../../theme/tokens';
+import { useTheme } from '../../theme/ThemeProvider';
 
 type Variant = 'solid' | 'outline' | 'soft';
 type Tone = 'green' | 'warn' | 'gold' | 'danger';
@@ -35,6 +36,8 @@ export default function Button({
   iconRight,
   accessibilityLabel,
 }: Props) {
+  const { colors } = useTheme();
+
   const main =
     tone === 'danger' ? colors.danger :
     tone === 'warn' || tone === 'gold' ? colors.warn :

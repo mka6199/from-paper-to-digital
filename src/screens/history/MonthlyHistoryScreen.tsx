@@ -3,14 +3,21 @@ import { View, Text, StyleSheet, FlatList } from 'react-native';
 import Screen from '../../components/layout/Screen';
 import AppHeader from '../../components/layout/AppHeader';
 import Card from '../../components/primitives/Card';
-import { colors, spacing, typography } from '../../theme/tokens';
+import { spacing, typography } from '../../theme/tokens';
+import { useTheme } from '../../theme/ThemeProvider';
 import {
   Payment,
   subscribeMyPaymentsInRange,
   monthRange,
 } from '../../services/payments';
 
+// ✅ currency
+import { useCurrency } from '../../context/CurrencyProvider';
+
 export default function MonthlyHistoryScreen({ route, navigation }: any) {
+  const { colors } = useTheme();
+  const { format } = useCurrency(); // ✅
+
   const p = (route?.params ?? {}) as { monthStart?: string; monthEnd?: string };
   const { start, end } = React.useMemo(() => {
     if (p.monthStart && p.monthEnd) {
@@ -43,8 +50,6 @@ export default function MonthlyHistoryScreen({ route, navigation }: any) {
     0
   );
 
-  const money = (n: number) => `${Math.round(n).toLocaleString()} AED`;
-
   const renderItem = ({ item }: { item: Payment }) => {
     const when = item.paidAt?.toDate ? item.paidAt.toDate() : undefined;
     const dateStr = when
@@ -55,16 +60,18 @@ export default function MonthlyHistoryScreen({ route, navigation }: any) {
     const amt = Number(item.amount ?? 0) + Number(item.bonus ?? 0);
 
     return (
-      <Card style={styles.rowCard}>
+      <Card style={{ padding: spacing.lg }}>
         <View style={styles.row}>
-          <Text style={typography.body}>{dateStr}</Text>
-          <Text style={[typography.body, { fontWeight: '700' }]}>{amt} AED</Text>
+          <Text style={[typography.body, { color: colors.text }]}>{dateStr}</Text>
+          <Text style={[typography.body, { fontWeight: '700', color: colors.text }]}>
+            {format(amt)}
+          </Text>
         </View>
         <Text style={[typography.small, { color: colors.subtext }]}>
           Worker: {item.workerName ?? item.workerId} • Method: {item.method ?? '—'}
         </Text>
         {!!item.note && (
-          <Text style={[typography.small, { marginTop: 4 }]}>{item.note}</Text>
+          <Text style={[typography.small, { marginTop: 4, color: colors.text }]}>{item.note}</Text>
         )}
       </Card>
     );
@@ -72,10 +79,10 @@ export default function MonthlyHistoryScreen({ route, navigation }: any) {
 
   const Header = (
     <View style={{ paddingBottom: spacing.lg }}>
-      <AppHeader title="Payments this month" onBack={() => navigation.goBack()} />
-      <Card style={styles.totalCard}>
-        <Text style={typography.small}>Total paid</Text>
-        <Text style={styles.totalValue}>{money(total)}</Text>
+      <AppHeader title="Payments this month" />
+      <Card style={{ padding: spacing.lg }}>
+        <Text style={[typography.small, { color: colors.subtext }]}>Total paid</Text>
+        <Text style={[styles.totalValue, { color: colors.text }]}>{format(total)}</Text>
         <Text style={[typography.small, { color: colors.subtext }]}>
           {start.toDateString()} — {end.toDateString()}
         </Text>
@@ -109,25 +116,10 @@ export default function MonthlyHistoryScreen({ route, navigation }: any) {
 }
 
 const styles = StyleSheet.create({
-  totalCard: {
-    padding: spacing.lg,
-    borderWidth: 1,
-    borderColor: '#eee',
-    borderRadius: 16,
-    gap: spacing.xs,
-    backgroundColor: '#fff',
-  },
   totalValue: {
     ...typography.h1,
     marginVertical: 4,
   } as any,
-  rowCard: {
-    borderWidth: 1,
-    borderColor: '#eee',
-    borderRadius: 16,
-    padding: spacing.lg,
-    backgroundColor: '#fff',
-  },
   row: {
     flexDirection: 'row',
     justifyContent: 'space-between',

@@ -5,7 +5,8 @@ import AppHeader from '../../components/layout/AppHeader';
 import Card from '../../components/primitives/Card';
 import Button from '../../components/primitives/Button';
 import TextField from '../../components/primitives/TextField';
-import { colors, spacing, typography } from '../../theme/tokens';
+import { spacing, typography } from '../../theme/tokens';
+import { useTheme } from '../../theme/ThemeProvider';
 import {
   Payment,
   subscribeMyPaymentsInRange,
@@ -14,22 +15,33 @@ import {
   rangeThisYear,
 } from '../../services/payments';
 
+// ✅ currency
+import { useCurrency } from '../../context/CurrencyProvider';
+
 type RangeKey = 'last3' | 'thisYear' | 'custom';
 
-function fmtAED(n: number) {
-  return `${Math.round(n).toLocaleString()} AED`;
+// keep the name but delegate to currency (non-breaking)
+function useFmtAED() {
+  const { format } = useCurrency();
+  return React.useCallback((n: number) => format(n), [format]);
 }
 
 function PaymentRow({ p }: { p: Payment }) {
+  const { colors } = useTheme();
+  const fmtAED = useFmtAED();
   const dt = p.paidAt?.toDate?.() ?? new Date();
   const d = dt.toISOString().slice(0, 10);
+  const total = (Number(p.amount) || 0) + (Number(p.bonus) || 0);
+
   return (
     <Card style={{ marginBottom: spacing.md }}>
-      <Text style={[typography.h2, { marginBottom: 2 }]}>{d}</Text>
+      <Text style={[typography.h2, { marginBottom: 2, color: colors.text }]}>{d}</Text>
       <Text style={[typography.small, { color: colors.subtext }]}>
         Worker: {p.workerName ?? '—'} • Method: {p.method ?? '—'}
       </Text>
-      <Text style={[typography.h2, { marginTop: spacing.sm }]}>{fmtAED((p.amount || 0) + (p.bonus || 0))}</Text>
+      <Text style={[typography.h2, { marginTop: spacing.sm, color: colors.text }]}>
+        {fmtAED(total)}
+      </Text>
     </Card>
   );
 }
@@ -57,7 +69,8 @@ function useControlledRange(initial: { start: Date; end: Date }) {
 }
 
 function PaymentHistoryScreen({ route }: any) {
-  const params = (route?.params ?? {}) as { month?: string };
+  const { colors } = useTheme();
+  const fmtAED = useFmtAED(); // ✅
   const initial = monthRange(new Date());
   const [rangeKey, setRangeKey] = React.useState<RangeKey>('last3');
   const { start, end, startText, endText, setStartText, setEndText, apply } = useControlledRange(initial);
@@ -106,7 +119,7 @@ function PaymentHistoryScreen({ route }: any) {
     return () => { unsub && unsub(); };
   }, [startText, endText]);
 
-  const total = rows.reduce((sum, p) => sum + (p.amount || 0) + (p.bonus || 0), 0);
+  const total = rows.reduce((sum, p) => sum + (Number(p.amount) || 0) + (Number(p.bonus) || 0), 0);
 
   return (
     <Screen padded>
@@ -141,8 +154,8 @@ function PaymentHistoryScreen({ route }: any) {
       )}
 
       <Card style={{ marginBottom: spacing.md }}>
-        <Text style={typography.small}>Total paid in range</Text>
-        <Text style={[typography.h2, { marginTop: 4 }]}>{fmtAED(total)}</Text>
+        <Text style={[typography.small, { color: colors.subtext }]}>Total paid in range</Text>
+        <Text style={[typography.h2, { marginTop: 4, color: colors.text }]}>{fmtAED(total)}</Text>
       </Card>
 
       <FlatList

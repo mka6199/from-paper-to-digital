@@ -1,5 +1,6 @@
 import React from 'react';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
+
 import AdminDashboardScreen from '../screens/admin/AdminDashboardScreen';
 import AdminUsersScreen from '../screens/admin/AdminUsersScreen';
 import AdminWorkersScreen from '../screens/admin/AdminWorkersScreen';
@@ -11,7 +12,10 @@ const Stack = createNativeStackNavigator();
 
 export default function AdminStack() {
   return (
-    <Stack.Navigator screenOptions={{ headerShown: false }}>
+    <Stack.Navigator
+      initialRouteName="AdminDashboard"   // ✅ ensure first render shows dashboard
+      screenOptions={{ headerShown: false }}
+    >
       <Stack.Screen name="AdminDashboard" component={AdminDashboardScreen} />
       <Stack.Screen name="AdminUsers" component={AdminUsersScreen} />
       <Stack.Screen name="AdminWorkers" component={AdminWorkersScreen} />

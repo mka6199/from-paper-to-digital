@@ -6,17 +6,19 @@ import AppHeader from '../../components/layout/AppHeader';
 import Card from '../../components/primitives/Card';
 import Button from '../../components/primitives/Button';
 import TextField from '../../components/primitives/TextField';
-import { colors, spacing, typography } from '../../theme/tokens';
+import { spacing, typography } from '../../theme/tokens';
 import {
   Payment,
   subscribeMyPaymentsInRange,
   rangeLast3Months,
   rangeThisYear,
 } from '../../services/payments';
+import { useTheme } from '../../theme/ThemeProvider';
+
+// ✅ currency
+import { useCurrency } from '../../context/CurrencyProvider';
 
 type RangeKey = 'last3' | 'thisYear' | 'custom';
-
-const fmtMoney = (n: number) => `${Math.round(n).toLocaleString()} AED`;
 
 function ymd(d: Date) {
   const y = d.getFullYear();
@@ -26,7 +28,15 @@ function ymd(d: Date) {
 }
 
 export default function HistoryHomeScreen({ navigation, route }: any) {
-  const deep = (route?.params ?? {}) as { monthStart?: string; monthEnd?: string; workerId?: string };
+  const { colors } = useTheme();
+  const { format } = useCurrency(); // ✅
+
+  const deep = (route?.params ?? {}) as {
+    monthStart?: string;
+    monthEnd?: string;
+    workerId?: string;
+  };
+
   const initialRange: { start: Date; end: Date; key: RangeKey } =
     deep.monthStart && deep.monthEnd
       ? { start: new Date(deep.monthStart), end: new Date(deep.monthEnd), key: 'custom' }
@@ -41,13 +51,12 @@ export default function HistoryHomeScreen({ navigation, route }: any) {
 
   const [workerQuery, setWorkerQuery] = React.useState('');
 
-  // 🔒 Guard: if we arrive here with any lingering worker-scoped params, clear them.
+  // Clear any lingering worker-scoped params when focusing this screen
   const routeObj = useRoute<any>();
   useFocusEffect(
     React.useCallback(() => {
       const p = (routeObj?.params ?? {}) as any;
       if (p?.workerId || p?.scoped) {
-        // clear params so History home is global again
         navigation.setParams({});
       }
     }, [navigation, routeObj?.params])
@@ -63,7 +72,7 @@ export default function HistoryHomeScreen({ navigation, route }: any) {
       setStart(r.start);
       setEnd(r.end);
     }
-    // custom range is handled via CustomRange screen
+    // custom range is updated via CustomRange screen
   }, [rangeKey]);
 
   React.useEffect(() => {
@@ -112,26 +121,38 @@ export default function HistoryHomeScreen({ navigation, route }: any) {
 
   const Header = (
     <View style={{ paddingBottom: spacing.lg }}>
-      <AppHeader title="Payment History" onBack={() => navigation.goBack?.()} />
+      <AppHeader title="Payment History" />
 
       <Card style={{ padding: spacing.md }}>
-        <View style={styles.segment}>
-          {(['last3', 'thisYear', 'custom'] as RangeKey[]).map((k) => (
-            <Pressable
-              key={k}
-              onPress={() => setRangeKey(k)}
-              style={[styles.segmentBtn, rangeKey === k && styles.segmentBtnActive]}
-            >
-              <Text
+        <View
+          style={[
+            styles.segment,
+            { backgroundColor: colors.surface, borderColor: colors.border, borderWidth: 1 },
+          ]}
+        >
+          {(['last3', 'thisYear', 'custom'] as RangeKey[]).map((k) => {
+            const active = rangeKey === k;
+            return (
+              <Pressable
+                key={k}
+                onPress={() => setRangeKey(k)}
                 style={[
-                  styles.segmentText,
-                  rangeKey === k && styles.segmentTextActive,
+                  styles.segmentBtn,
+                  active && { backgroundColor: colors.brand },
                 ]}
               >
-                {k === 'last3' ? 'Last 3 months' : k === 'thisYear' ? 'This year' : 'Custom'}
-              </Text>
-            </Pressable>
-          ))}
+                <Text
+                  style={[
+                    styles.segmentText,
+                    { color: active ? '#fff' : colors.text },
+                    active && { fontWeight: '700' },
+                  ]}
+                >
+                  {k === 'last3' ? 'Last 3 months' : k === 'thisYear' ? 'This year' : 'Custom'}
+                </Text>
+              </Pressable>
+            );
+          })}
         </View>
 
         <View style={{ marginTop: spacing.md, gap: spacing.xs }}>
@@ -155,9 +176,13 @@ export default function HistoryHomeScreen({ navigation, route }: any) {
 
       <View style={{ height: spacing.md }} />
       <View style={{ paddingHorizontal: spacing.lg, gap: spacing.md }}>
-        <Card style={styles.totalCard}>
-          <Text style={typography.small}>Total paid in range</Text>
-          <Text style={styles.totalValue}>{fmtMoney(totalPaid)}</Text>
+        <Card style={{ padding: spacing.lg }}>
+          <Text style={[typography.small, { color: colors.subtext }]}>
+            Total paid in range
+          </Text>
+          <Text style={[styles.totalValue, { color: colors.text }]}>
+            {format(totalPaid)}
+          </Text>
           <Text style={[typography.small, { color: colors.subtext }]}>
             {filtered.length} payment{filtered.length === 1 ? '' : 's'}
           </Text>
@@ -174,7 +199,9 @@ export default function HistoryHomeScreen({ navigation, route }: any) {
       </View>
 
       <View style={{ paddingHorizontal: spacing.lg, marginTop: spacing.lg }}>
-        <Text style={[typography.h2, { marginBottom: spacing.sm }]}>Payments</Text>
+        <Text style={[typography.h2, { marginBottom: spacing.sm, color: colors.text }]}>
+          Payments
+        </Text>
       </View>
     </View>
   );
@@ -193,7 +220,12 @@ export default function HistoryHomeScreen({ navigation, route }: any) {
   const renderItem = ({ item }: any) => {
     if (item._type === 'header') {
       return (
-        <Text style={[typography.h2, { marginTop: spacing.md, marginBottom: spacing.xs }]}>
+        <Text
+          style={[
+            typography.h2,
+            { marginTop: spacing.md, marginBottom: spacing.xs, color: colors.text },
+          ]}
+        >
           {item.payload}
         </Text>
       );
@@ -209,17 +241,21 @@ export default function HistoryHomeScreen({ navigation, route }: any) {
     const amount = Number(p.amount ?? 0) + Number(p.bonus ?? 0);
 
     return (
-      <Card style={styles.rowCard}>
+      <Card style={{ padding: spacing.lg }}>
         <View style={styles.rowTop}>
-          <Text style={typography.body} numberOfLines={1}>
+          <Text style={[typography.body, { color: colors.text }]} numberOfLines={1}>
             {p.workerName ?? p.workerId}
           </Text>
-          <Text style={[typography.body, { fontWeight: '700' }]}>{fmtMoney(amount)}</Text>
+          <Text style={[typography.body, { fontWeight: '700', color: colors.text }]}>
+            {format(amount)}
+          </Text>
         </View>
         <Text style={[typography.small, { color: colors.subtext }]}>
           {line} • Method: {p.method ?? '—'}
         </Text>
-        {!!p.note && <Text style={[typography.small, { marginTop: 4 }]}>{p.note}</Text>}
+        {!!p.note && (
+          <Text style={[typography.small, { marginTop: 4, color: colors.text }]}>{p.note}</Text>
+        )}
       </Card>
     );
   };
@@ -253,7 +289,6 @@ const styles = StyleSheet.create({
   segment: {
     flexDirection: 'row',
     borderRadius: 14,
-    backgroundColor: '#f3f5f7',
     padding: 4,
     gap: 4,
   },
@@ -263,35 +298,16 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     alignItems: 'center',
   },
-  segmentBtnActive: {
-    backgroundColor: colors.brand,
-  },
   segmentText: {
     ...typography.small,
-    color: colors.text,
   } as any,
-  segmentTextActive: {
-    color: '#fff',
-    fontWeight: '700',
-  },
-  totalCard: {
-    padding: spacing.lg,
-    borderWidth: 1,
-    borderColor: '#eee',
-    borderRadius: 16,
-    gap: spacing.xs,
-    backgroundColor: '#fff',
-  },
   totalValue: {
     ...typography.h1,
     marginVertical: 4,
   } as any,
-  rowCard: {
-    padding: spacing.lg,
-    borderWidth: 1,
-    borderColor: '#eee',
-    borderRadius: 16,
-    backgroundColor: '#fff',
+  rowTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 6,
   },
-  rowTop: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 },
 });

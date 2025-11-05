@@ -5,15 +5,18 @@ import AppHeader from '../../components/layout/AppHeader';
 import Card from '../../components/primitives/Card';
 import Button from '../../components/primitives/Button';
 import TextField from '../../components/primitives/TextField';
-import { spacing, typography, colors } from '../../theme/tokens';
+import { spacing, typography } from '../../theme/tokens';
 import { findUserByEmail, subscribeWorkersByOwnerUid, AdminUser } from '../../services/admin';
 import { deleteWorker } from '../../services/workers';
 import { signOut } from '../../../firebase';
 import AdminGate from '../../components/admin/AdminGate';
+import { useTheme } from '../../theme/ThemeProvider';
 
 const isEmail = (s: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(s).trim());
 
 export default function AdminWorkersScreen({ navigation }: any) {
+  const { colors } = useTheme();
+
   const [queryEmail, setQueryEmail] = React.useState('');
   const [pickedUser, setPickedUser] = React.useState<AdminUser | null>(null);
   const [rows, setRows] = React.useState<any[]>([]);
@@ -80,7 +83,7 @@ export default function AdminWorkersScreen({ navigation }: any) {
       <View style={{ alignItems: 'flex-end' }}>
         <Button label="Log out" variant="outline" tone="danger" onPress={onLogout} />
       </View>
-      <Card style={{ padding: spacing.md }}>
+      <Card style={{ padding: spacing.md, borderColor: colors.border, backgroundColor: colors.surface }}>
         <TextField
           label="User email"
           value={queryEmail}
@@ -96,8 +99,8 @@ export default function AdminWorkersScreen({ navigation }: any) {
           </Text>
         )}
       </Card>
-      <View style={{ paddingHorizontal: 0 }}>
-        <Text style={[typography.h2, { marginTop: spacing.md }]}>Workers</Text>
+      <View>
+        <Text style={[typography.h2, { marginTop: spacing.md, color: colors.text }]}>Workers</Text>
       </View>
     </View>
   );
@@ -106,9 +109,9 @@ export default function AdminWorkersScreen({ navigation }: any) {
     const salary = Number(item.monthlySalaryAED ?? item.baseSalary ?? 0);
     const due = item.nextDueAt?.toDate ? item.nextDueAt.toDate() : null;
     return (
-      <Card style={styles.row}>
+      <Card style={[styles.row, { borderColor: colors.border, backgroundColor: colors.surface }]}>
         <View style={{ flex: 1 }}>
-          <Text style={typography.body}>{item.name || '—'}</Text>
+          <Text style={[typography.body, { color: colors.text }]}>{item.name || '—'}</Text>
           <Text style={[typography.small, { color: colors.subtext }]}>
             role: {item.role ?? '—'} • salary: {salary} AED
           </Text>
@@ -126,21 +129,21 @@ export default function AdminWorkersScreen({ navigation }: any) {
 
   return (
     <AdminGate title="Admin Panel">
-    <Screen>
-      <FlatList
-        data={rows}
-        keyExtractor={(i) => i.id}
-        renderItem={renderItem}
-        ListHeaderComponent={header}
-        contentContainerStyle={{ padding: spacing.lg, gap: spacing.md, paddingBottom: spacing['2xl'] }}
-        showsVerticalScrollIndicator={false}
-        ListEmptyComponent={
-          pickedUser
-            ? <Text style={[typography.small, { textAlign: 'center' }]}>No workers for this user.</Text>
-            : <Text style={[typography.small, { textAlign: 'center' }]}>Enter an email to load a user.</Text>
-        }
-      />
-    </Screen>
+      <Screen>
+        <FlatList
+          data={rows}
+          keyExtractor={(i) => i.id}
+          renderItem={renderItem}
+          ListHeaderComponent={header}
+          contentContainerStyle={{ padding: spacing.lg, gap: spacing.md, paddingBottom: spacing['2xl'] }}
+          showsVerticalScrollIndicator={false}
+          ListEmptyComponent={
+            <Text style={[typography.small, { textAlign: 'center', color: colors.subtext }]}>
+              {pickedUser ? 'No workers for this user.' : 'Enter an email to load a user.'}
+            </Text>
+          }
+        />
+      </Screen>
     </AdminGate>
   );
 }
@@ -148,7 +151,10 @@ export default function AdminWorkersScreen({ navigation }: any) {
 const styles = StyleSheet.create({
   row: {
     padding: spacing.lg,
-    borderWidth: 1, borderColor: '#eee', borderRadius: 16, backgroundColor: '#fff',
-    flexDirection: 'row', alignItems: 'center', gap: spacing.md,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
   },
 });

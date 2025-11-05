@@ -2,7 +2,7 @@ import React from 'react';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 
 import HistoryHomeScreen from '../screens/history/HistoryHomeScreen';
-import MonthlyHistoryScreen from '../screens/history/MonthlyHistoryScreen'; 
+import MonthlyHistoryScreen from '../screens/history/MonthlyHistoryScreen';
 import CustomRangeScreen from '../screens/history/CustomRangeScreen';
 
 const Stack = createNativeStackNavigator();

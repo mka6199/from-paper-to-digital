@@ -5,7 +5,7 @@ import AppHeader from '../../components/layout/AppHeader';
 import Card from '../../components/primitives/Card';
 import Button from '../../components/primitives/Button';
 import TextField from '../../components/primitives/TextField';
-import { spacing, typography, colors } from '../../theme/tokens';
+import { spacing, typography } from '../../theme/tokens';
 import {
   subscribeAllUsers,
   setUserRole,
@@ -17,12 +17,14 @@ import {
 import { signOut } from '../../../firebase';
 import AdminGate from '../../components/admin/AdminGate';
 import { AuthContext } from '../../context/AuthProvider';
+import { useTheme } from '../../theme/ThemeProvider';
 
 const isEmail = (s: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(s).trim());
 const isPhone = (s: string) => /^[0-9()+\-.\s]{7,20}$/.test(String(s).trim());
 const isYMD  = (s: string) => /^\d{4}-\d{2}-\d{2}$/.test(String(s).trim());
 
 export default function AdminUsersScreen({ navigation }: any) {
+  const { colors } = useTheme();
   const { user } = React.useContext(AuthContext);
 
   const [rows, setRows] = React.useState<AdminUser[]>([]);
@@ -131,9 +133,7 @@ export default function AdminUsersScreen({ navigation }: any) {
     );
   }
 
-  async function onLogout() {
-    try { await signOut(); } catch {}
-  }
+  async function onLogout() { try { await signOut(); } catch {} }
 
   const header = (
     <View style={{ paddingHorizontal: spacing.lg }}>
@@ -147,7 +147,7 @@ export default function AdminUsersScreen({ navigation }: any) {
   const renderItem = ({ item }: { item: AdminUser }) => {
     const editing = editUid === item.uid;
     return (
-      <Card style={styles.row}>
+      <Card style={[styles.row, { borderColor: colors.border, backgroundColor: colors.surface }]}>
         <View style={{ flex: 1, paddingRight: spacing.md, gap: spacing.xs }}>
           {editing ? (
             <>
@@ -159,7 +159,7 @@ export default function AdminUsersScreen({ navigation }: any) {
             </>
           ) : (
             <>
-              <Text style={typography.body}>
+              <Text style={[typography.body, { color: colors.text }]}>
                 {(item.firstName || '') + ' ' + (item.lastName || '')}
               </Text>
               <Text style={[typography.small, { color: colors.subtext }]} numberOfLines={1}>
@@ -192,7 +192,7 @@ export default function AdminUsersScreen({ navigation }: any) {
                 onPress={() => onToggleRole(item)}
               />
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                <Text style={typography.small}>Active</Text>
+                <Text style={[typography.small, { color: colors.text }]}>Active</Text>
                 <Switch
                   value={item.isActive !== false}
                   onValueChange={(v) => onToggleActive(item, v)}
@@ -217,7 +217,11 @@ export default function AdminUsersScreen({ navigation }: any) {
           renderItem={renderItem}
           contentContainerStyle={{ padding: spacing.lg, gap: spacing.md, paddingBottom: spacing['2xl'] }}
           showsVerticalScrollIndicator={false}
-          ListEmptyComponent={<Text style={[typography.small, { textAlign: 'center' }]}>No users found.</Text>}
+          ListEmptyComponent={
+            <Text style={[typography.small, { textAlign: 'center', color: colors.subtext }]}>
+              No users found.
+            </Text>
+          }
         />
       </Screen>
     </AdminGate>
@@ -227,7 +231,10 @@ export default function AdminUsersScreen({ navigation }: any) {
 const styles = StyleSheet.create({
   row: {
     padding: spacing.lg,
-    borderWidth: 1, borderColor: '#eee', borderRadius: 16, backgroundColor: '#fff',
-    flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 16,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.md,
   },
 });

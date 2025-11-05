@@ -4,12 +4,14 @@ import Screen from '../components/layout/Screen';
 import AppHeader from '../components/layout/AppHeader';
 import Button from '../components/primitives/Button';
 import Card from '../components/primitives/Card';
-import { colors, spacing, typography } from '../theme/tokens';
+import { spacing } from '../theme/tokens';
 import { AuthContext } from '../context/AuthProvider';
 import { getAuth, sendPasswordResetEmail, updateProfile } from 'firebase/auth';
 import { getMyProfile, upsertMyProfile } from '../services/profile';
+import { useTheme } from '../theme/ThemeProvider';
 
 export default function ProfileScreen({ navigation }: any) {
+  const { colors } = useTheme();
   const { profile } = React.useContext(AuthContext);
   const auth = getAuth();
   const email = auth.currentUser?.email ?? profile?.email ?? '';
@@ -31,7 +33,6 @@ export default function ProfileScreen({ navigation }: any) {
       })
       .catch(() => {})
       .finally(() => setLoading(false));
-
   }, []);
 
   async function onSave() {
@@ -69,48 +70,82 @@ export default function ProfileScreen({ navigation }: any) {
     }
   }
 
+  const styles = React.useMemo(
+    () =>
+      StyleSheet.create({
+        sectionCard: {
+          padding: spacing.lg,
+          gap: spacing.md,
+          backgroundColor: colors.surface,
+          borderColor: colors.border,
+          borderWidth: 1,
+          borderRadius: 16,
+        },
+        title: { fontSize: 22, fontWeight: '700', color: colors.text },
+        label: { fontSize: 14, color: colors.subtext },
+        valueText: { fontSize: 16, color: colors.subtext, marginTop: 4 },
+        input: {
+          borderWidth: 1,
+          borderColor: (colors as any).inputBorder || colors.border,
+          borderRadius: 12,
+          paddingHorizontal: 12,
+          paddingVertical: 10,
+          marginTop: 6,
+          color: colors.text,
+          backgroundColor: (colors as any).inputBg || colors.surface,
+        },
+        spacer: { height: spacing['2xl'] as any },
+      }),
+    [colors]
+  );
+
   return (
     <Screen>
-      <AppHeader title="Profile" />
+      <AppHeader
+        title="Profile"
+        onBack={() => navigation.navigate('Settings')}
+        backLabel="Settings"
+      />
       <ScrollView contentContainerStyle={{ padding: spacing.lg, gap: spacing.lg }}>
-        <Card style={{ padding: spacing.lg, gap: spacing.md }}>
-          <Text style={typography.h1}>Profile Information</Text>
+        <Card style={styles.sectionCard}>
+          <Text style={styles.title}>Profile Information</Text>
 
           <View>
-            <Text style={typography.small}>Email</Text>
-            <Text style={[typography.body, { color: colors.subtext, marginTop: 4 }]}>
-              {email || '—'}
-            </Text>
+            <Text style={styles.label}>Email</Text>
+            <Text style={styles.valueText}>{email || '—'}</Text>
           </View>
 
           <View>
-            <Text style={typography.small}>First Name</Text>
+            <Text style={styles.label}>First Name</Text>
             <TextInput
               value={firstName}
               onChangeText={setFirstName}
               placeholder="First name"
+              placeholderTextColor={colors.subtext}
               autoCapitalize="words"
               style={styles.input}
             />
           </View>
 
           <View>
-            <Text style={typography.small}>Last Name</Text>
+            <Text style={styles.label}>Last Name</Text>
             <TextInput
               value={lastName}
               onChangeText={setLastName}
               placeholder="Last name"
+              placeholderTextColor={colors.subtext}
               autoCapitalize="words"
               style={styles.input}
             />
           </View>
 
           <View>
-            <Text style={typography.small}>Phone</Text>
+            <Text style={styles.label}>Phone</Text>
             <TextInput
               value={phone}
               onChangeText={setPhone}
               placeholder="+971 50 000 0000"
+              placeholderTextColor={colors.subtext}
               keyboardType="phone-pad"
               style={styles.input}
             />
@@ -130,20 +165,8 @@ export default function ProfileScreen({ navigation }: any) {
           />
         </Card>
 
-        <View style={{ height: spacing['2xl'] }} />
+        <View style={styles.spacer} />
       </ScrollView>
     </Screen>
   );
 }
-
-const styles = StyleSheet.create({
-  input: {
-    borderWidth: 1,
-    borderColor: '#eee',
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    marginTop: 6,
-    backgroundColor: '#fff',
-  },
-});
