@@ -10,92 +10,129 @@ import { getWorker, Worker } from '../../services/workers';
 import { useCurrency } from '../../context/CurrencyProvider';
 import { useTheme } from '../../theme/ThemeProvider';
 
+type RouteParams = { id: string };
+
 export default function PaySalaryScreen({ route, navigation }: any) {
-  const { id } = route.params as { id: string };
+  const { id } = route.params as RouteParams;
   const { colors } = useTheme();
   const { format } = useCurrency();
 
-  const [w, setW] = useState<Worker | null>(null);
+  const [worker, setWorker] = useState<Worker | null>(null);
   const [amount, setAmount] = useState('');
   const [bonus, setBonus] = useState('');
   const [method, setMethod] = useState<'cash' | 'bank'>('bank');
+  const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    (async () => {
-      const data = await getWorker(id);
-      setW(data);
-    })();
+    getWorker(id)
+      .then((w) => setWorker(w))
+      .catch(() => setWorker(null));
   }, [id]);
 
-  const monthly = Number(w?.monthlySalaryAED ?? w?.baseSalary ?? 0) || 0;
-  const formattedMonthly = format(monthly);
+  const amountNum = Number(amount || 0);
+  const bonusNum = Number(bonus || 0);
+  const canContinue = amountNum > 0 && !!worker;
 
-  const numericAmount = Number(amount || 0);
-  const numericBonus = Number(bonus || 0);
-
-  function handlePay() {
-    if (!numericAmount || numericAmount <= 0) {
-      return Alert.alert('Enter a valid amount');
+  const goToOtp = () => {
+    if (!worker) {
+      Alert.alert('Error', 'Worker not found.');
+      return;
+    }
+    if (!worker.phone) {
+      Alert.alert(
+        'Missing phone number',
+        'This worker does not have a phone number. Please edit the worker and add one before sending an OTP.'
+      );
+      return;
+    }
+    if (!(amountNum > 0)) {
+      Alert.alert('Invalid amount', 'Please enter a valid amount to pay.');
+      return;
     }
 
     navigation.navigate('OTPConfirm', {
-      workerId: id,
-      workerName: w?.name ?? '',
-      amount: numericAmount,
-      bonus: numericBonus,
+      workerId: worker.id,
+      workerName: worker.name,
+      phone: worker.phone,
+      amount: amountNum,
+      bonus: bonusNum || 0,
       method,
       month: new Date().toISOString().slice(0, 7),
     });
-  }
+  };
 
   return (
     <Screen>
-      <AppHeader title="Pay Salary" onBack={() => navigation.goBack()} />
+      <AppHeader
+        title="Pay Salary"
+        onBack={() => navigation.goBack()}
+      />
 
       <View style={{ padding: spacing.lg, gap: spacing.lg }}>
-        <Card style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-          <Text style={[typography.h2, { color: colors.text }]}>{w?.name || '—'}</Text>
-          {w?.role ? (
-            <Text style={[typography.small, { color: colors.subtext }]}>{w.role}</Text>
-          ) : null}
-          <Text style={[typography.small, { color: colors.subtext, marginTop: spacing.xs }]}>
-            Monthly Salary: {formattedMonthly}
-          </Text>
-        </Card>
+        {worker && (
+          <Card>
+            <Text style={[typography.h2, { color: colors.text }]}>
+              {worker.name}
+            </Text>
+            <Text style={{ color: colors.subtext, marginTop: spacing.xs }}>
+              {worker.role || 'Worker'}
+            </Text>
+            <Text style={{ marginTop: spacing.sm, color: colors.subtext }}>
+              Monthly salary{' '}
+              {format(
+                Number(worker.monthlySalaryAED ?? worker.baseSalary ?? 0)
+              )}
+            </Text>
+            {worker.phone && (
+              <Text style={{ marginTop: spacing.sm, color: colors.subtext }}>
+                Phone: {worker.phone}
+              </Text>
+            )}
+          </Card>
+        )}
+
+        {!worker && (
+          <Text style={{ color: colors.subtext }}>Loading worker…</Text>
+        )}
 
         <TextField
-          label="Amount to Pay"
-          keyboardType="numeric"
+          label="Amount to pay (AED)"
           value={amount}
           onChangeText={setAmount}
-        />
-        <TextField
-          label="Bonus (optional)"
-          keyboardType="numeric"
-          value={bonus}
-          onChangeText={setBonus}
+          keyboardType="number-pad"
         />
 
+        <TextField
+          label="Bonus (optional)"
+          value={bonus}
+          onChangeText={setBonus}
+          keyboardType="number-pad"
+        />
+
+        {/* Bank / Cash toggle with highlight */}
         <View style={styles.row}>
-          <Button
-            label="Cash"
-            size="sm"
-            variant={method === 'cash' ? 'solid' : 'outline'}
-            onPress={() => setMethod('cash')}
-            fullWidth
-          />
-          <Button
-            label="Bank Transfer"
-            size="sm"
-            variant={method === 'bank' ? 'solid' : 'outline'}
-            onPress={() => setMethod('bank')}
-            fullWidth
-          />
+          <View style={styles.half}>
+            <Button
+              label="Bank"
+              variant={method === 'bank' ? 'solid' : 'outline'}
+              onPress={() => setMethod('bank')}
+              fullWidth
+            />
+          </View>
+          <View style={styles.half}>
+            <Button
+              label="Cash"
+              variant={method === 'cash' ? 'solid' : 'outline'}
+              onPress={() => setMethod('cash')}
+              fullWidth
+            />
+          </View>
         </View>
 
         <Button
-          label={`Pay ${format(numericAmount)}`}
-          onPress={handlePay}
+          label={busy ? 'Please wait…' : 'Continue to OTP'}
+          onPress={goToOtp}
+          disabled={!canContinue || busy}
           fullWidth
         />
       </View>
@@ -104,14 +141,12 @@ export default function PaySalaryScreen({ route, navigation }: any) {
 }
 
 const styles = StyleSheet.create({
-  card: {
-    padding: spacing.lg,
-    borderWidth: 1,
-    borderRadius: 16,
-    alignItems: 'center',
-  },
   row: {
     flexDirection: 'row',
     gap: spacing.md,
+  },
+  half: {
+    flex: 1,
+    minWidth: 0,
   },
 });

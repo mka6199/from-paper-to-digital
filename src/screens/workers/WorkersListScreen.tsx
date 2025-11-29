@@ -60,6 +60,9 @@ export default function WorkersListScreen({ navigation }: any) {
       <WorkerListItem
         name={item.name}
         role={item.role ?? ''}
+        employeeId={item.employeeId}
+        monthlySalaryAED={Number(item.monthlySalaryAED ?? item.baseSalary ?? 0)}
+        dueAtMs={item.nextDueAtMs}
         onPress={() =>
           navigation.navigate('WorkerProfile', {
             id: item.id,

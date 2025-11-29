@@ -14,8 +14,12 @@ import {
   Timestamp,
   orderBy,
 } from 'firebase/firestore';
+import { getNextWorkerNumber, formatEmployeeId } from './ids';
 
 export type Worker = {
+  nextDueAtMs?: number;
+  employeeId?: string;
+  salaryDueDay?: number;
   id?: string;
   name: string;
   role?: string;
@@ -30,6 +34,9 @@ export type Worker = {
   nextDueAt?: any;
   createdAt?: any;
   updatedAt?: any;
+
+  // ✅ NEW: phone number used for OTP
+  phone?: string;
 };
 
 const COL = collection(db, 'workers');
@@ -48,6 +55,7 @@ function toWorker(id: string, data: any): Worker {
   return {
     id,
     name: data?.name ?? '',
+    employeeId: data?.employeeId ?? undefined,
     role: data?.role ?? '',
     monthlySalaryAED: Number(data?.monthlySalaryAED ?? data?.baseSalary ?? 0),
     baseSalary: Number(data?.baseSalary ?? 0),
@@ -58,8 +66,19 @@ function toWorker(id: string, data: any): Worker {
     terminatedAt: data?.terminatedAt ?? null,
 
     nextDueAt: data?.nextDueAt,
+    nextDueAtMs: (() => {
+      const x = data?.nextDueAt;
+      if (!x) return undefined;
+      if (typeof x === 'number') return x;
+      if (x?.toMillis) return x.toMillis();
+      if (x?.seconds) return x.seconds * 1000;
+      return undefined;
+    })(),
     createdAt: data?.createdAt,
     updatedAt: data?.updatedAt,
+
+    // ✅ map phone from Firestore
+    phone: data?.phone ?? undefined,
   };
 }
 
@@ -144,7 +163,7 @@ export function subscribeDueWorkers(before: Date, cb: (workers: Worker[]) => voi
         return !!t && tsSeconds(t) <= tsSeconds(until);
       })
     );
-  }, { status: 'active' }); 
+  }, { status: 'active' });
 }
 
 export async function addWorker(
@@ -152,12 +171,22 @@ export async function addWorker(
 ) {
   await ensureAuth();
   const uid = auth.currentUser!.uid;
+
+  const seq = await getNextWorkerNumber();
+  const eid = formatEmployeeId(seq);
+
+  const dueDay = Math.min(Math.max((w as any).salaryDueDay ?? 28, 1), 28);
+  const now = new Date();
+  const firstDue = new Date(now.getFullYear(), now.getMonth(), dueDay);
+  if (firstDue < now) firstDue.setMonth(firstDue.getMonth() + 1);
+
   const ref = await addDoc(COL, {
     ...w,
+    employeeId: (w as any).employeeId ?? eid,
     ownerUid: uid,
-    status: 'active',        
+    status: 'active',
     terminatedAt: null,
-    nextDueAt: serverTimestamp(),
+    nextDueAt: Timestamp.fromDate(firstDue),
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   });

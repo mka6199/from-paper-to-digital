@@ -5,7 +5,7 @@ import AppHeader from '../../components/layout/AppHeader';
 import TextField from '../../components/primitives/TextField';
 import Button from '../../components/primitives/Button';
 import { spacing } from '../../theme/tokens';
-import { subscribeWorker, updateWorker } from '../../services/workers';
+import { subscribeWorker, updateWorker, Worker } from '../../services/workers';
 import { CommonActions } from '@react-navigation/native';
 import { useTheme } from '../../theme/ThemeProvider';
 
@@ -14,167 +14,198 @@ export default function EditWorkerScreen({ route, navigation }: any) {
   const { workerId, id } = route.params || {};
   const effectiveId = id ?? workerId;
 
+  const [worker, setWorker] = useState<Worker | null>(null);
   const [name, setName] = useState('');
   const [role, setRole] = useState('');
-  const [salary, setSalary] = useState<string>('');
+  const [salary, setSalary] = useState('');
   const [status, setStatus] = useState<'active' | 'former'>('active');
+  const [employeeId, setEmployeeId] = useState('');
+  const [dueDay, setDueDay] = useState('28');
+  const [phone, setPhone] = useState(''); // ✅ NEW
+  const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     if (!effectiveId) return;
+
     const unsub = subscribeWorker(effectiveId, (w) => {
+      setWorker(w);
       if (!w) return;
       setName(w.name ?? '');
       setRole(w.role ?? '');
       const s = Number(w.monthlySalaryAED ?? w.baseSalary ?? 0);
       setSalary(s ? String(s) : '');
       setStatus((w.status as any) ?? 'active');
+      setEmployeeId((w as any).employeeId ?? '');
+      const sd = Number((w as any).salaryDueDay ?? 28);
+      setDueDay(String(Math.min(Math.max(sd || 28, 1), 28)));
+      setPhone((w as any).phone ?? ''); // ✅ load phone
     });
-    return () => unsub && unsub();
+
+    return () => unsub();
   }, [effectiveId]);
 
-  function parseSalary(v: string) {
-    const n = Number(v);
-    return Number.isFinite(n) && n >= 0 ? n : NaN;
-  }
+  const salaryNum = (() => {
+    const n = Number(salary);
+    if (!Number.isFinite(n) || n < 0) return NaN;
+    return n;
+  })();
 
-  async function onSave() {
-    const salaryNum = parseSalary(salary);
-    if (!name.trim()) return Alert.alert('Name is required');
-    if (!role.trim()) return Alert.alert('Role is required');
-    if (!Number.isFinite(salaryNum)) return Alert.alert('Monthly salary must be a non-negative number');
+  const dueDayNum = (() => {
+    const n = Number(dueDay);
+    if (!Number.isFinite(n)) return 28;
+    return Math.min(Math.max(n, 1), 28);
+  })();
+
+  const onSave = async () => {
+    if (!effectiveId) return;
+    if (!name.trim()) {
+      Alert.alert('Name is required');
+      return;
+    }
+    if (!role.trim()) {
+      Alert.alert('Role is required');
+      return;
+    }
+    if (!phone.trim()) {
+      Alert.alert('Phone number is required');
+      return;
+    }
+    if (!Number.isFinite(salaryNum)) {
+      Alert.alert('Monthly salary must be a non-negative number');
+      return;
+    }
 
     try {
+      setBusy(true);
       await updateWorker(effectiveId, {
         name: name.trim(),
         role: role.trim(),
         monthlySalaryAED: salaryNum,
+        baseSalary: salaryNum,
+        salaryDueDay: dueDayNum,
+        phone: phone.trim(), // ✅ save phone
       });
-
-      const updated = { id: effectiveId, name: name.trim(), role: role.trim(), monthlySalaryAED: salaryNum };
-
-      const state = navigation.getState();
-      const prev = state.routes[state.index - 1];
-      if (prev) {
-        navigation.dispatch({
-          ...CommonActions.setParams({
-            params: { id: effectiveId, worker: updated, _ts: Date.now() },
-          }),
-          source: prev.key,
-        });
-      }
-
-      navigation.goBack();
+      navigation.dispatch(CommonActions.goBack());
     } catch (e: any) {
-      Alert.alert('Update failed', e?.message ?? 'Please try again.');
+      Alert.alert('Error', e?.message ?? 'Failed to update worker');
+    } finally {
+      setBusy(false);
     }
-  }
+  };
 
-  /**
-   * Confirmation helper:
-   * - On web: run the action immediately (no popup).
-   * - On native: show a confirmation Alert.
-   */
-  function confirmOrRun(onYes: () => void, title: string, msg: string) {
-    if (Platform.OS === 'web') {
-      onYes();
-      return;
+  const markFormer = async () => {
+    if (!effectiveId) return;
+    try {
+      setBusy(true);
+      await updateWorker(effectiveId, {
+        status: 'former',
+        terminatedAt: new Date(),
+      });
+      setStatus('former');
+    } catch (e: any) {
+      Alert.alert('Error', e?.message ?? 'Failed to update status');
+    } finally {
+      setBusy(false);
     }
-    Alert.alert(title, msg, [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'OK', style: 'destructive', onPress: onYes },
-    ]);
-  }
+  };
 
-  async function markFormer() {
-    confirmOrRun(
-      async () => {
-        try {
-          await updateWorker(effectiveId, { status: 'former', terminatedAt: new Date() as any });
-          setStatus('former');
-        } catch (e: any) {
-          Alert.alert('Action failed', e?.message ?? 'Could not update status.');
-        }
-      },
-      'Mark as Former',
-      'This will move the worker into Former status. They will stop appearing in Active lists.'
-    );
-  }
+  const markActive = async () => {
+    if (!effectiveId) return;
+    try {
+      setBusy(true);
+      await updateWorker(effectiveId, {
+        status: 'active',
+        terminatedAt: null,
+      });
+      setStatus('active');
+    } catch (e: any) {
+      Alert.alert('Error', e?.message ?? 'Failed to update status');
+    } finally {
+      setBusy(false);
+    }
+  };
 
-  async function restoreActive() {
-    confirmOrRun(
-      async () => {
-        try {
-          await updateWorker(effectiveId, { status: 'active', terminatedAt: null as any });
-          setStatus('active');
-        } catch (e: any) {
-          Alert.alert('Action failed', e?.message ?? 'Could not update status.');
-        }
-      },
-      'Restore to Active',
-      'This will move the worker back to Active status.'
-    );
-  }
-
-  const isFormer = status === 'former';
+  const isIOS = Platform.OS === 'ios'; // in case you use this in styles later
 
   return (
     <Screen>
-      <AppHeader title="Edit Worker" onBack={() => navigation.goBack()} />
+      <AppHeader
+        title="Edit Worker"
+        onBack={() => navigation.goBack()}
+      />
+
       <View style={{ padding: spacing.lg, gap: spacing.md }}>
-        <View
-          style={{
-            alignSelf: 'flex-start',
-            paddingVertical: 6,
-            paddingHorizontal: 10,
-            borderRadius: 999,
-            backgroundColor: isFormer ? `${colors.danger}22` : `${colors.brand}22`,
-            borderWidth: 1,
-            borderColor: isFormer ? colors.danger : colors.brand,
-          }}
-        >
-          <Text
-            style={{
-              fontWeight: '700',
-              color: isFormer ? colors.danger : colors.brand,
-            }}
-          >
-            {isFormer ? 'Former' : 'Active'}
+        {!worker && (
+          <Text style={{ color: colors.subtext }}>
+            Loading worker details…
           </Text>
-        </View>
+        )}
 
-        <TextField label="Name" value={name} onChangeText={setName} />
-        <TextField label="Role" value={role} onChangeText={setRole} />
-        <TextField
-          label="Monthly Salary (AED)"
-          value={salary}
-          onChangeText={setSalary}
-          keyboardType="numeric"
-        />
+        {worker && (
+          <>
+            <TextField label="Name" value={name} onChangeText={setName} />
+            <TextField label="Role" value={role} onChangeText={setRole} />
 
-        <Button
-          label="Save"
-          onPress={onSave}
-          fullWidth
-          style={{ paddingVertical: spacing.sm, minHeight: 40 }}
-        />
+            <TextField
+              label="Employee ID"
+              value={employeeId}
+              editable={false}
+            />
 
-        {isFormer ? (
-          <Button
-            label="Restore to Active"
-            variant="outline"
-            onPress={restoreActive}
-            fullWidth
-            style={{ paddingVertical: spacing.sm, minHeight: 40 }}
-          />
-        ) : (
-          <Button
-            label="Mark as Former"
-            variant="outline"
-            tone="warn"
-            onPress={markFormer}
-            fullWidth
-            style={{ paddingVertical: spacing.sm, minHeight: 40 }}
-          />
+            {/* ✅ Phone field */}
+            <TextField
+              label="Phone number"
+              value={phone}
+              onChangeText={setPhone}
+              keyboardType="phone-pad"
+              placeholder="+9715xxxxxxxx"
+            />
+
+            <TextField
+              label="Salary Due Day (1–28)"
+              value={dueDay}
+              onChangeText={(t) =>
+                setDueDay(t.replace(/[^0-9]/g, '').slice(0, 2))
+              }
+              keyboardType="number-pad"
+            />
+
+            <TextField
+              label="Monthly Salary (AED)"
+              value={salary}
+              onChangeText={setSalary}
+              keyboardType="number-pad"
+            />
+
+            <Button
+              label={busy ? 'Saving…' : 'Save'}
+              onPress={onSave}
+              disabled={busy}
+              fullWidth
+            />
+
+            <View style={{ height: spacing.lg }} />
+
+            <Text style={{ color: colors.subtext, marginBottom: spacing.sm }}>
+              Status: {status === 'active' ? 'Active' : 'Former'}
+            </Text>
+
+            {status === 'active' ? (
+              <Button
+                label={busy ? 'Updating…' : 'Mark as Former'}
+                onPress={markFormer}
+                disabled={busy}
+                fullWidth
+              />
+            ) : (
+              <Button
+                label={busy ? 'Updating…' : 'Mark as Active'}
+                onPress={markActive}
+                disabled={busy}
+                fullWidth
+              />
+            )}
+          </>
         )}
       </View>
     </Screen>

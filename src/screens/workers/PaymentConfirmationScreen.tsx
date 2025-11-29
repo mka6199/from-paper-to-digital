@@ -1,9 +1,9 @@
 import React from 'react';
-import { Text, View } from 'react-native';
-import Screen from '../../components/layout/Screen';
+import { SafeAreaView, Text, View, StyleSheet } from 'react-native';
+import { CommonActions } from '@react-navigation/native';
+
 import Button from '../../components/primitives/Button';
 import { spacing, typography } from '../../theme/tokens';
-import { CommonActions } from '@react-navigation/native';
 import { useTheme } from '../../theme/ThemeProvider';
 import { useCurrency } from '../../context/CurrencyProvider';
 
@@ -21,90 +21,126 @@ export default function PaymentConfirmationScreen({ route, navigation }: any) {
   const { format } = useCurrency();
 
   const { workerId, workerName, amount, method } = route.params || {};
-  const amtAED = Number(amount || 0);           
-  const displayAmount = format(amtAED);      
+  const amtAED = Number(amount || 0);
+  const displayAmount = format(amtAED);
   const circleBg = hexToRgba(colors.brand, 0.18);
 
   return (
-    <Screen>
-      <View
-        style={{
-          alignItems: 'center',
-          marginTop: spacing.xl,
-          gap: spacing.md,
-          paddingHorizontal: spacing.lg,
-        }}
-      >
-        <View
-          style={{
-            width: 96,
-            height: 96,
-            borderRadius: 48,
-            backgroundColor: circleBg,
-            alignItems: 'center',
-            justifyContent: 'center',
-          }}
-        >
-          <Text style={{ fontSize: 48, color: colors.brand }}>✓</Text>
+    <SafeAreaView
+      style={[styles.safeArea, { backgroundColor: colors.background }]}
+    >
+      <View style={styles.container}>
+        <View style={styles.content}>
+          <View style={[styles.circle, { backgroundColor: circleBg }]}>
+            <Text style={[styles.check, { color: colors.brand }]}>✓</Text>
+          </View>
+
+          <Text style={[typography.h1, { color: colors.text }]}>
+            Success!
+          </Text>
+
+          <Text
+            style={[
+              typography.body,
+              styles.message,
+              { color: colors.subtext },
+            ]}
+          >
+            Payment of {displayAmount} via{' '}
+            {method === 'cash' ? 'Cash' : 'Bank Transfer'}
+            {workerName ? ` to ${workerName}` : ''}.
+          </Text>
         </View>
 
-        <Text style={[typography.h1, { color: colors.text }]}>Success!</Text>
-
-        <Text style={[typography.body, { color: colors.subtext, textAlign: 'center' }]}>
-          Payment of {displayAmount} via {method === 'cash' ? 'Cash' : 'Bank Transfer'}
-          {workerName ? ` to ${workerName}` : ''}.
-        </Text>
-      </View>
-
-      <View style={{ marginTop: spacing.xl, gap: spacing.md, paddingHorizontal: spacing.lg }}>
-        <Button
-          label="Back to Worker"
-          tone="green"
-          onPress={() => {
-            navigation.dispatch(
-              CommonActions.reset({
-                index: 1,
-                routes: [
-                  { name: 'WorkersList' }, 
-                  {
-                    name: 'WorkerProfile',
-                    params: {
-                      id: workerId,
-                      worker: workerName ? { id: workerId, name: workerName } : undefined,
+        <View style={styles.buttons}>
+          <Button
+            label="Back to Worker"
+            tone="green"
+            onPress={() => {
+              navigation.dispatch(
+                CommonActions.reset({
+                  index: 1,
+                  routes: [
+                    { name: 'WorkersList' },
+                    {
+                      name: 'WorkerProfile',
+                      params: {
+                        id: workerId,
+                        worker: workerName
+                          ? { id: workerId, name: workerName }
+                          : undefined,
+                      },
                     },
-                  },
-                ],
-              })
-            );
-          }}
-          fullWidth
-        />
+                  ],
+                })
+              );
+            }}
+            fullWidth
+          />
 
-        <Button
-          label="View History"
-          variant="soft"
-          tone="green"
-          onPress={() => {
-            navigation.dispatch(
-              CommonActions.reset({
-                index: 2,
-                routes: [
-                  { name: 'WorkersList' },
-                  {
-                    name: 'WorkerProfile',
-                    params: {
-                      id: workerId,
-                      worker: workerName ? { id: workerId, name: workerName } : undefined,
+          <Button
+            label="View History"
+            variant="soft"
+            tone="green"
+            onPress={() => {
+              navigation.dispatch(
+                CommonActions.reset({
+                  index: 2,
+                  routes: [
+                    { name: 'WorkersList' },
+                    {
+                      name: 'WorkerProfile',
+                      params: {
+                        id: workerId,
+                        worker: workerName
+                          ? { id: workerId, name: workerName }
+                          : undefined,
+                      },
                     },
-                  },
-                  { name: 'PaymentHistory', params: { workerId, workerName } },
-                ],
-              })
-            );
-          }}
-          fullWidth
-        />
+                    { name: 'PaymentHistory', params: { workerId, workerName } },
+                  ],
+                })
+              );
+            }}
+            fullWidth
+          />
+        </View>
       </View>
-    </Screen>
+    </SafeAreaView>
   );
 }
+
+const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+  },
+  container: {
+    flex: 1,
+    paddingHorizontal: spacing.lg,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  content: {
+    alignItems: 'center',
+    marginBottom: spacing.xl,
+  },
+  circle: {
+    width: 96,
+    height: 96,
+    borderRadius: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: spacing.lg,
+  },
+  check: {
+    fontSize: 48,
+  },
+  message: {
+    textAlign: 'center',
+    marginTop: spacing.sm,
+  },
+  buttons: {
+    width: '100%',
+    gap: spacing.md,
+  },
+});

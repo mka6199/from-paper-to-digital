@@ -1,7 +1,7 @@
 // firebase.ts
 import { Platform } from 'react-native';
 import ReactNativeAsyncStorage from '@react-native-async-storage/async-storage';
-import { initializeApp } from 'firebase/app';
+import { initializeApp, FirebaseApp } from 'firebase/app';
 import { getFirestore } from 'firebase/firestore';
 import {
   getAuth,
@@ -10,12 +10,10 @@ import {
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   signOut as fbSignOut,
+  sendPasswordResetEmail,
   User,
 } from 'firebase/auth';
 
-// ----------------------
-// Your Firebase config
-// ----------------------
 const firebaseConfig = {
   apiKey: "AIzaSyBCE1zLQqPdxvDaXbm-8OBG4tSVfq8aIhA",
   authDomain: "from-paper-to-digital.firebaseapp.com",
@@ -26,62 +24,40 @@ const firebaseConfig = {
   measurementId: "G-TL0E1ZZMC0"
 };
 
-const app = initializeApp(firebaseConfig);
+export const app: FirebaseApp = initializeApp(firebaseConfig);
 export const db = getFirestore(app);
 
-// ------------------------------------------------------------------
-// Compatibility shim for getReactNativePersistence across SDK versions
-// ------------------------------------------------------------------
 let getRNPersist: undefined | ((storage: any) => any);
-try {
-  // Newer SDKs (v9.6.1+ / v10+ / v11+) expose it here
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  getRNPersist = require('firebase/auth').getReactNativePersistence;
-} catch {}
+try { getRNPersist = require('firebase/auth').getReactNativePersistence; } catch {}
 if (!getRNPersist) {
-  try {
-    // Some older modular builds expose it here
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    getRNPersist = require('firebase/auth/react-native').getReactNativePersistence;
-  } catch {}
+  try { getRNPersist = require('firebase/auth/react-native').getReactNativePersistence; } catch {}
 }
 
-// ------------------------------------------------------------
-// Auth: persistent on native if helper exists; otherwise basic
-// ------------------------------------------------------------
 export const auth =
   Platform.OS === 'web' || !getRNPersist
-    ? getAuth(app) // web, or very old SDKs that lack the helper (no persistence)
-    : initializeAuth(app, {
-        persistence: getRNPersist(ReactNativeAsyncStorage),
-      });
+    ? getAuth(app)
+    : initializeAuth(app, { persistence: getRNPersist(ReactNativeAsyncStorage) });
 
-// Resolves once we’ve observed the first auth state (used by ensureAuth)
 export const authReady = new Promise<void>((resolve) => {
-  const unsub = onAuthStateChanged(auth, () => {
-    unsub();
-    resolve();
-  });
+  const unsub = onAuthStateChanged(auth, () => { unsub(); resolve(); });
 });
 
-// ----------------------
-// Helper auth functions
-// ----------------------
 export async function signIn(email: string, password: string) {
   return signInWithEmailAndPassword(auth, email.trim(), password);
 }
-
 export async function signUp(email: string, password: string) {
   return createUserWithEmailAndPassword(auth, email.trim(), password);
 }
+export async function signOut() { return fbSignOut(auth); }
 
-export async function signOut() {
-  return fbSignOut(auth);
-}
-
-/** Ensure we have a logged-in user before calling read/write services. */
 export async function ensureAuth(): Promise<User> {
   if (!auth.currentUser) await authReady;
   if (!auth.currentUser) throw new Error('Not authenticated');
   return auth.currentUser!;
+}
+
+export async function sendResetPasswordEmail(toEmail?: string) {
+  const email = (toEmail ?? auth.currentUser?.email ?? "").trim();
+  if (!email) throw new Error("No email available for password reset.");
+  await sendPasswordResetEmail(auth, email);
 }

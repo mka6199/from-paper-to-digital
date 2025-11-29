@@ -1,10 +1,17 @@
+// src/screens/NotificationsScreen.tsx
 import React from 'react';
 import { View, Text, FlatList, StyleSheet, Pressable, Alert } from 'react-native';
 import Screen from '../components/layout/Screen';
-import AppHeader from '../components/layout/AppHeader';
 import Card from '../components/primitives/Card';
 import Button from '../components/primitives/Button';
-import { spacing } from '../theme/tokens';
+import { spacing, typography, colors as tokenColors } from '../theme/tokens';
+import { useTheme } from '../theme/ThemeProvider';
+import { useCurrency } from '../context/CurrencyProvider';
+
+import { subscribeMyWorkers, Worker } from '../services/workers';
+import { Payment, monthRange, subscribeMyPaymentsInRange } from '../services/payments';
+import { computeDueSummary } from '../services/alerts';
+
 import {
   AppNotification,
   subscribeMyNotifications,
@@ -12,7 +19,6 @@ import {
   markAllNotificationsRead,
   deleteNotification,
 } from '../services/notifications';
-import { useTheme } from '../theme/ThemeProvider';
 
 const timeAgo = (d?: Date | null) => {
   if (!d) return '—';
@@ -26,13 +32,30 @@ const timeAgo = (d?: Date | null) => {
   return `${days}d ago`;
 };
 
-export default function NotificationsScreen({ navigation }: any) {
+export default function NotificationsScreen() {
   const { colors, mode } = useTheme();
+  const { format } = useCurrency();
+
+  // Live data for “always-on” salary alerts
+  const [workers, setWorkers] = React.useState<Worker[]>([]);
+  const [payments, setPayments] = React.useState<Payment[]>([]);
+  const [{ start, end }] = React.useState(() => monthRange());
+
+  // Inbox items saved in Firestore
   const [rows, setRows] = React.useState<AppNotification[]>([]);
   const [ready, setReady] = React.useState(false);
 
+  // ----- subscriptions -----
   React.useEffect(() => {
-    let unsub: (() => void) | null = null;
+    let u1: undefined | (() => void);
+    let u2: undefined | (() => void);
+    try { u1 = subscribeMyWorkers(setWorkers); } catch (e) { console.warn('subscribeMyWorkers failed:', e); }
+    try { u2 = subscribeMyPaymentsInRange({ start, end }, setPayments); } catch (e) { console.warn('subscribeMyPaymentsInRange failed:', e); }
+    return () => { u1 && u1(); u2 && u2(); };
+  }, [start, end]);
+
+  React.useEffect(() => {
+    let unsub: undefined | (() => void);
     try {
       unsub = subscribeMyNotifications((list) => {
         setRows(list);
@@ -42,59 +65,133 @@ export default function NotificationsScreen({ navigation }: any) {
       console.warn('subscribeMyNotifications failed:', e);
       setReady(true);
     }
-    return () => { if (unsub) unsub(); };
+    return () => { unsub && unsub(); };
   }, []);
 
-  const styles = React.useMemo(() => StyleSheet.create({
+  // ----- computed “live” summary -----
+  const live = React.useMemo(() => computeDueSummary(workers, payments, new Date()), [workers, payments]);
+  const money = (n: number) => format(n);
+
+  // ----- styles -----
+  const s = React.useMemo(() => StyleSheet.create({
+    page: { padding: spacing.lg, gap: spacing.xl, paddingBottom: spacing['2xl'] as any },
+
+    sectionHeader: {
+      ...typography.h2,
+      color: colors.text,
+    },
+    sub: {
+      ...typography.small,
+      color: colors.subtext,
+    },
+
+    card: {
+      padding: spacing.lg,
+      borderWidth: 1,
+      borderRadius: 16,
+      backgroundColor: colors.surface,
+      borderColor: colors.border,
+      gap: spacing.sm,
+    },
+
+    tileRow: { flexDirection: 'row', gap: spacing.md },
+
+    tile: {
+      flex: 1,
+      padding: spacing.lg,
+      borderRadius: 14,
+      borderWidth: 1,
+      gap: 6,
+    },
+
+    overdueTile: {
+      borderColor: tokenColors.danger,
+      backgroundColor: 'rgba(185,28,28,0.12)',
+    },
+    dueSoonTile: {
+      borderColor: '#B45309',
+      backgroundColor: 'rgba(180,83,9,0.12)',
+    },
+    okTile: {
+      borderColor: colors.border,
+      backgroundColor: mode === 'dark' ? '#0f1417' : '#ffffff',
+    },
+
+    tileTitle: {
+      fontWeight: '800',
+      fontSize: 15,
+      color: colors.text,
+    },
+    tileValue: {
+      ...typography.h2,
+      color: colors.text,
+    },
+    tileNote: {
+      ...typography.small,
+      color: colors.subtext,
+    },
+
     row: {
       padding: spacing.lg,
       borderWidth: 1,
-      borderColor: colors.border,
       borderRadius: 16,
       backgroundColor: colors.surface,
+      borderColor: colors.border,
       flexDirection: 'row',
       alignItems: 'center',
       gap: spacing.md,
     },
-    unread: {
-      borderColor: colors.brand,
-      backgroundColor: mode === 'dark' ? '#0f2417' : '#f5fff7',
-    },
-    title: {
+    rowUnreadBorder: { borderColor: colors.focus },
+    rowUnreadBG: { backgroundColor: mode === 'dark' ? '#0f1b2d' : '#f2f7ff' },
+
+    rowTitle: {
       fontSize: 16,
       fontWeight: '700',
       color: colors.text,
     },
-    subtext: {
+    rowSub: {
       fontSize: 14,
       color: colors.subtext,
     },
+
+    headerBar: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+    },
+
     empty: {
-      fontSize: 14,
+      ...typography.small,
       textAlign: 'center',
       color: colors.subtext,
     },
-    headerWrap: { paddingHorizontal: spacing.lg },
-    headerActions: { alignItems: 'flex-end', marginBottom: spacing.md },
-    listContent: { padding: spacing.lg, gap: spacing.md, paddingBottom: spacing['2xl'] as any },
-    removeText: { fontSize: 14, color: colors.danger },
   }), [colors, mode]);
 
+  // ----- item renderer -----
   const renderItem = ({ item }: { item: AppNotification }) => {
     const dt = item.createdAt?.toDate ? item.createdAt.toDate() : null;
-    const subtitle =
+
+    // choose subtle accent by type
+    const accent =
       item.type === 'due'
-        ? (item.workerName ? `Worker: ${item.workerName}` : item.workerId || '')
-        : item.body || '';
+        ? { borderColor: tokenColors.danger, backgroundColor: 'rgba(185,28,28,0.08)' }
+        : {};
 
     return (
-      <Card style={[styles.row, item.isRead === false && styles.unread]}>
+      <Card style={[
+        s.row,
+        item.isRead === false && s.rowUnreadBorder,
+        item.isRead === false && s.rowUnreadBG,
+        accent,
+      ]}>
         <View style={{ flex: 1, gap: 4 }}>
-          <Text style={styles.title} numberOfLines={1}>{item.title}</Text>
-          {!!subtitle && (
-            <Text style={styles.subtext} numberOfLines={1}>{subtitle}</Text>
-          )}
-          <Text style={styles.subtext}>{timeAgo(dt)}</Text>
+          <Text style={s.rowTitle} numberOfLines={1}>{item.title}</Text>
+          {(item.body || item.workerName || item.workerId) ? (
+            <Text style={s.rowSub} numberOfLines={1}>
+              {item.body ?? (item.workerName || item.workerId)}
+            </Text>
+          ) : null}
+          <Text style={s.rowSub}>{timeAgo(dt)}</Text>
         </View>
 
         <View style={{ gap: 8, alignItems: 'flex-end' }}>
@@ -103,27 +200,20 @@ export default function NotificationsScreen({ navigation }: any) {
           ) : (
             <Button label="Mark read" onPress={() => markNotificationRead(item.id!, true)} />
           )}
-          <Pressable onPress={() => {
-            Alert.alert('Remove notification', 'Delete this notification?', [
-              { text: 'Cancel', style: 'cancel' },
-              { text: 'Delete', style: 'destructive', onPress: () => deleteNotification(item.id!) },
-            ]);
-          }}>
-            <Text style={styles.removeText}>Remove</Text>
+          <Pressable
+            onPress={() =>
+              Alert.alert('Remove notification', 'Delete this notification?', [
+                { text: 'Cancel', style: 'cancel' },
+                { text: 'Delete', style: 'destructive', onPress: () => deleteNotification(item.id!) },
+              ])
+            }
+          >
+            <Text style={{ color: tokenColors.danger, fontSize: 14 }}>Remove</Text>
           </Pressable>
         </View>
       </Card>
     );
   };
-
-  const header = (
-    <View style={styles.headerWrap}>
-      <AppHeader title="Notifications" />
-      <View style={styles.headerActions}>
-        <Button label="Mark all read" variant="outline" onPress={() => markAllNotificationsRead()} />
-      </View>
-    </View>
-  );
 
   return (
     <Screen>
@@ -131,11 +221,52 @@ export default function NotificationsScreen({ navigation }: any) {
         data={rows}
         keyExtractor={(i) => String(i.id)}
         renderItem={renderItem}
-        ListHeaderComponent={header}
-        ListEmptyComponent={
-          ready ? <Text style={styles.empty}>All caught up! No notifications.</Text> : null
+        ListHeaderComponent={
+          <View style={s.page}>
+            {/* Headline for the page (uses stack header—no AppHeader component) */}
+            <View style={s.headerBar}>
+              <View>
+                <Text style={s.sectionHeader}>Notifications</Text>
+                <Text style={s.sub}>Review alerts and recent activity.</Text>
+              </View>
+              <Button label="Mark all read" variant="outline" onPress={() => markAllNotificationsRead()} />
+            </View>
+
+            {/* Live Salary Alerts (computed) */}
+            <View>
+              <Text style={s.sectionHeader}>Live Salary Alerts</Text>
+              <Text style={s.sub}>Always up-to-date, even if no inbox item was stored yet.</Text>
+
+              <View style={[s.tileRow, { marginTop: spacing.md }]}>
+                <Card style={[s.tile, (live.overdueCount > 0 ? s.overdueTile : s.okTile)]}>
+                  <Text style={s.tileTitle}>Overdue</Text>
+                  <Text style={s.tileValue}>
+                    {live.overdueCount} worker{live.overdueCount === 1 ? '' : 's'}
+                  </Text>
+                  <Text style={s.tileNote}>{money(live.overdueAmountAED)}</Text>
+                </Card>
+
+                <Card style={[s.tile, (live.dueSoonCount > 0 ? s.dueSoonTile : s.okTile)]}>
+                  <Text style={s.tileTitle}>Due soon (this month)</Text>
+                  <Text style={s.tileValue}>
+                    {live.dueSoonCount} worker{live.dueSoonCount === 1 ? '' : 's'}
+                  </Text>
+                  <Text style={s.tileNote}>{money(live.dueSoonAmountAED)}</Text>
+                </Card>
+              </View>
+            </View>
+
+            {/* Inbox header */}
+            <View>
+              <Text style={[s.sectionHeader, { marginTop: spacing.lg }]}>Inbox</Text>
+              <Text style={s.sub}>Saved notifications</Text>
+            </View>
+          </View>
         }
-        contentContainerStyle={styles.listContent}
+        ListEmptyComponent={
+          ready ? <Text style={s.empty}>All caught up! No notifications.</Text> : null
+        }
+        contentContainerStyle={{ paddingBottom: spacing['2xl'] as any, gap: spacing.md }}
         showsVerticalScrollIndicator={false}
       />
     </Screen>

@@ -10,6 +10,8 @@ import { Payment, monthRange, subscribeMyPaymentsInRange } from '../services/pay
 import { subscribeMyUnreadCount } from '../services/notifications';
 import { useTheme } from '../theme/ThemeProvider';
 import { useCurrency } from '../context/CurrencyProvider';
+import NotificationDaemon from '../components/system/NotificationDaeom';
+import type { DueSummary } from '../services/alerts';
 
 const moneyFactory = (format: (n: number) => string) => (n: number) => format(n);
 
@@ -63,11 +65,17 @@ export default function DashboardScreen({ navigation }: any) {
   const [gotPayments, setGotPayments] = React.useState(false);
   const [unread, setUnread] = React.useState(0);
 
+  // Live salary-alert summary fed by NotificationDaemon
+  const [dueSummary, setDueSummary] = React.useState<DueSummary>({
+    dueSoonCount: 0,
+    dueSoonAmountAED: 0,
+    overdueCount: 0,
+    overdueAmountAED: 0,
+  });
+
   React.useEffect(() => {
     let u: (() => void) | null = null;
-    try {
-      u = subscribeMyUnreadCount(setUnread);
-    } catch {}
+    try { u = subscribeMyUnreadCount(setUnread); } catch {}
     return () => { if (u) u(); };
   }, []);
 
@@ -158,6 +166,37 @@ export default function DashboardScreen({ navigation }: any) {
   const liabilitiesAED = totals.monthlyLiability;
   const remainingAED = salaryAED - liabilitiesAED;
 
+  function renderAlertsBanner() {
+    const any = (dueSummary.overdueCount + dueSummary.dueSoonCount) > 0;
+    if (!any) return null;
+    const msg = [
+      dueSummary.overdueCount ? `${dueSummary.overdueCount} overdue` : null,
+      dueSummary.dueSoonCount ? `${dueSummary.dueSoonCount} due soon` : null,
+    ].filter(Boolean).join(' · ');
+
+    return (
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Open salary due alerts"
+        onPress={() => navigation.getParent()?.navigate('Notifications')}
+        style={{
+          padding: spacing.md,
+          borderRadius: 12,
+          borderWidth: 1,
+          borderColor: tokenColors.warn,
+          backgroundColor: `${tokenColors.warn}12`,
+          marginHorizontal: spacing.lg,
+          marginBottom: spacing.md,
+        }}
+      >
+        <Text style={[typography.small, { color: tokenColors.warn, fontWeight: '700' }]}>
+          Salary Alerts
+        </Text>
+        <Text style={{ color: colors.text, marginTop: 2 }}>{msg}</Text>
+      </Pressable>
+    );
+  }
+
   const Header = (
     <View style={{ paddingBottom: spacing.lg }}>
       <View
@@ -196,16 +235,13 @@ export default function DashboardScreen({ navigation }: any) {
         </Pressable>
       </View>
 
+      {renderAlertsBanner()}
+
       <View style={{ paddingHorizontal: spacing.lg, gap: spacing.md }}>
         <Card style={[styles.statCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
           <Text style={[styles.statLabel, { color: colors.subtext }]}>Workers</Text>
           <Text style={[styles.statValue, { color: colors.text }]}>{totals.workers}</Text>
-          <Button
-            label="View workers"
-            variant="soft"
-            onPress={() => navigation.navigate('Workers')}
-            fullWidth
-          />
+          <Button label="View workers" variant="soft" onPress={() => navigation.navigate('Workers')} fullWidth />
         </Card>
 
         <Card style={[styles.statCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
@@ -238,20 +274,10 @@ export default function DashboardScreen({ navigation }: any) {
 
         <Card style={[styles.statCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
           <Text style={[styles.statLabel, { color: colors.subtext }]}>Salary Left (after liabilities)</Text>
-          <Text
-            style={[
-              styles.statValue,
-              { color: remainingAED < 0 ? tokenColors.danger : colors.text },
-            ]}
-          >
+          <Text style={[styles.statValue, { color: remainingAED < 0 ? tokenColors.danger : colors.text }]}>
             {salaryAED > 0 ? money(remainingAED) : 'Set your salary in Settings'}
           </Text>
-          <Button
-            label="Edit salary in Settings"
-            variant="outline"
-            onPress={() => navigation.navigate('Settings')}
-            fullWidth
-          />
+          <Button label="Edit salary in Settings" variant="outline" onPress={() => navigation.navigate('Settings')} fullWidth />
         </Card>
 
         <Card style={[styles.statCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
@@ -266,10 +292,7 @@ export default function DashboardScreen({ navigation }: any) {
               const { start, end } = monthRange();
               navigation.navigate('History', {
                 screen: 'MonthlyHistory',
-                params: {
-                  monthStart: start.toISOString(),
-                  monthEnd: end.toISOString(),
-                },
+                params: { monthStart: start.toISOString(), monthEnd: end.toISOString() },
               });
             }}
             fullWidth
@@ -289,24 +312,23 @@ export default function DashboardScreen({ navigation }: any) {
 
   return (
     <Screen>
+      {/* feeds dueSummary */}
+      <NotificationDaemon onSummary={setDueSummary} />
+
       <FlatList
         data={payments.slice(0, 20)}
         keyExtractor={(p) => String(p.id)}
         renderItem={({ item }) => {
           const when = item.paidAt?.toDate ? item.paidAt.toDate() : undefined;
           const dateStr = when
-            ? `${when.getFullYear()}-${String(when.getMonth() + 1).padStart(2, '0')}-${String(
-                when.getDate()
-              ).padStart(2, '0')}`
+            ? `${when.getFullYear()}-${String(when.getMonth() + 1).padStart(2, '0')}-${String(when.getDate()).padStart(2, '0')}`
             : '—';
           const total = Number(item.amount ?? 0) + Number(item.bonus ?? 0);
           return (
             <Card style={[styles.rowCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
               <View style={styles.row}>
                 <Text style={[typography.body, { color: colors.text }]}>{dateStr}</Text>
-                <Text style={[typography.body, { fontWeight: '700', color: colors.text }]}>
-                  {money(total)}
-                </Text>
+                <Text style={[typography.body, { fontWeight: '700', color: colors.text }]}>{money(total)}</Text>
               </View>
               <Text style={[typography.small, { color: colors.subtext }]}>
                 Worker: {item.workerName ?? item.workerId} • Method: {item.method ?? '—'}
@@ -317,12 +339,7 @@ export default function DashboardScreen({ navigation }: any) {
         ListHeaderComponent={Header}
         ListEmptyComponent={
           !isLoading ? (
-            <Text
-              style={[
-                typography.small,
-                { textAlign: 'center', color: colors.subtext },
-              ]}
-            >
+            <Text style={[typography.small, { textAlign: 'center', color: colors.subtext }]}>
               No payments yet this month.
             </Text>
           ) : null
@@ -349,13 +366,8 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
     backgroundColor: '#fff',
   },
-  statLabel: {
-    ...typography.small,
-  } as any,
-  statValue: {
-    ...typography.h1,
-    marginBottom: spacing.sm,
-  } as any,
+  statLabel: { ...typography.small } as any,
+  statValue: { ...typography.h1, marginBottom: spacing.sm } as any,
   rowCard: {
     borderWidth: 1,
     borderColor: '#eee',
@@ -363,11 +375,7 @@ const styles = StyleSheet.create({
     padding: spacing.lg,
     backgroundColor: '#fff',
   },
-  row: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 6,
-  },
+  row: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 },
   badge: {
     position: 'absolute',
     right: 6,
@@ -380,9 +388,5 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: 4,
   },
-  badgeText: {
-    color: '#fff',
-    fontSize: 10,
-    fontWeight: '700',
-  },
+  badgeText: { color: '#fff', fontSize: 10, fontWeight: '700' },
 });

@@ -1,3 +1,4 @@
+// src/screens/SettingsScreen.tsx
 import React from 'react';
 import {
   View,
@@ -15,7 +16,7 @@ import { CommonActions } from '@react-navigation/native';
 import Screen from '../components/layout/Screen';
 import { spacing } from '../theme/tokens';
 import AppHeader from '../components/layout/AppHeader';
-import { signOut } from '../../firebase';
+import { auth, signOut, sendResetPasswordEmail } from '../../firebase';
 import { AuthContext } from '../context/AuthProvider';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -40,6 +41,7 @@ export default function SettingsScreen({ navigation }: any) {
     profile?.salaryMonthlyAED != null ? String(profile.salaryMonthlyAED) : ''
   );
   const [savingSalary, setSavingSalary] = React.useState(false);
+  const [resetBusy, setResetBusy] = React.useState(false);
 
   React.useEffect(() => {
     (async () => {
@@ -67,7 +69,9 @@ export default function SettingsScreen({ navigation }: any) {
   }, [profile?.salaryMonthlyAED]);
 
   const persist = React.useCallback(async (key: string, val: string) => {
-    try { await AsyncStorage.setItem(key, val); } catch {}
+    try {
+      await AsyncStorage.setItem(key, val);
+    } catch {}
   }, []);
 
   React.useEffect(() => {
@@ -138,7 +142,7 @@ export default function SettingsScreen({ navigation }: any) {
     } else {
       Alert.alert('Language', 'Choose your language', [
         { text: 'English', onPress: () => { setLanguage('English'); persist('settings.language', 'English'); } },
-        { text: 'Arabic',  onPress: () => { setLanguage('Arabic');  persist('settings.language', 'Arabic'); } },
+        { text: 'Arabic', onPress: () => { setLanguage('Arabic'); persist('settings.language', 'Arabic'); } },
         { text: 'Cancel', style: 'cancel' },
       ]);
     }
@@ -161,7 +165,10 @@ export default function SettingsScreen({ navigation }: any) {
       Alert.alert('Currency Format', 'Choose your currency', [
         ...supported.map((c) => ({
           text: c,
-          onPress: () => { setCurrency(c); persist('settings.currency', c); },
+          onPress: () => {
+            setCurrency(c);
+            persist('settings.currency', c);
+          },
         })),
         { text: 'Cancel', style: 'cancel' },
       ]);
@@ -206,6 +213,42 @@ export default function SettingsScreen({ navigation }: any) {
     }
   }
 
+  async function onResetPassword() {
+    const email = auth.currentUser?.email || profile?.email || '';
+    if (!email) {
+      Alert.alert('No email', 'Please sign in again. We could not determine your email.');
+      return;
+    }
+    setResetBusy(true);
+    try {
+      await sendResetPasswordEmail(email);
+
+      // Explain and offer to sign out now (works on web & native)
+      Alert.alert(
+        'Reset email sent',
+        `We sent a password reset email to ${email}.\n\nAfter you set a new password, your current session may stay active until it refreshes. For security and to apply the change immediately, you can sign out now.`,
+        [
+          { text: 'OK' },
+          {
+            text: 'Sign me out now',
+            style: 'destructive',
+            onPress: async () => {
+              try {
+                await signOut();
+              } catch {}
+              resetToAuth();
+              setTimeout(resetToAuth, 0);
+            },
+          },
+        ]
+      );
+    } catch (e: any) {
+      Alert.alert('Error', e?.message ?? 'Could not send reset email.');
+    } finally {
+      setResetBusy(false);
+    }
+  }
+
   return (
     <Screen>
       <AppHeader title="Settings" />
@@ -233,6 +276,22 @@ export default function SettingsScreen({ navigation }: any) {
               {profile?.email}
             </Text>
           </View>
+
+          <Pressable
+            onPress={onResetPassword}
+            disabled={resetBusy}
+            style={({ pressed }) => [styles.item, pressed && { opacity: 0.92 }]}
+            accessibilityRole="button"
+            accessibilityLabel="Send password reset email"
+          >
+            <View style={styles.itemLeft}>
+              <Ionicons name="key-outline" size={22} color={colors.brand} />
+              <Text style={[styles.itemText, { color: colors.text }]}>
+                {resetBusy ? 'Sending reset email…' : 'Send password reset email'}
+              </Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color={colors.subtext} />
+          </Pressable>
 
           <View style={[styles.item, { justifyContent: 'space-between' }]}>
             <View style={styles.itemLeft}>
@@ -452,7 +511,12 @@ export default function SettingsScreen({ navigation }: any) {
 
         <View style={[styles.section, { borderColor: colors.border, backgroundColor: colors.surface }]}>
           <Text style={[styles.sectionTitle, { color: colors.subtext }]}>Income</Text>
-          <View style={[styles.item, { flexDirection: 'column', alignItems: 'stretch', gap: 8, borderTopWidth: StyleSheet.hairlineWidth }]}>
+          <View
+            style={[
+              styles.item,
+              { flexDirection: 'column', alignItems: 'stretch', gap: 8, borderTopWidth: StyleSheet.hairlineWidth },
+            ]}
+          >
             <Text style={[styles.itemText, { color: colors.text }]}>Monthly Salary (AED)</Text>
             <TextField
               value={salaryText}
