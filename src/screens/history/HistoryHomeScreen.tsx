@@ -27,6 +27,7 @@ import {
 import { useTheme } from '../../theme/ThemeProvider';
 import { useCurrency } from '../../context/CurrencyProvider';
 import { logger } from '../../utils/logger';
+import { getContentBottomPadding } from '../../utils/layout';
 
 type RangePreset = 'thisMonth' | 'last3' | 'thisYear' | 'custom';
 
@@ -208,12 +209,17 @@ export default function HistoryHomeScreen() {
         Payment History
       </Text>
 
-      {/* Range Selector Pills */}
-      <View style={[styles.pillRow, { marginBottom: spacing.md }]}>
+      {/* Range Selector */}
+      <View
+        style={[
+          styles.segment,
+          { backgroundColor: colors.surface, borderColor: colors.border, marginBottom: spacing.md },
+        ]}
+      >
         {(['thisMonth', 'last3', 'thisYear', 'custom'] as RangePreset[]).map((k) => {
           const active = preset === k;
           const label =
-            k === 'thisMonth' ? 'This Month' : k === 'last3' ? 'Last 3 Months' : k === 'thisYear' ? 'This Year' : 'Custom Range';
+            k === 'thisMonth' ? 'This Month' : k === 'last3' ? 'Last 3 Mo' : k === 'thisYear' ? 'This Year' : 'Custom';
           return (
             <Pressable
               key={k}
@@ -224,20 +230,15 @@ export default function HistoryHomeScreen() {
                   setPreset(k);
                 }
               }}
-              style={({ pressed }) => [
-                styles.pill,
-                {
-                  backgroundColor: active ? colors.brand : colors.surface,
-                  borderColor: active ? colors.brand : colors.border,
-                  opacity: pressed ? 0.7 : 1,
-                },
+              style={[
+                styles.segmentItem,
+                active && { backgroundColor: colors.brand },
               ]}
             >
               <Text
                 style={[
-                  styles.pillText,
+                  styles.segmentLabel,
                   { color: active ? '#fff' : colors.text },
-                  active && { fontWeight: '700' },
                 ]}
               >
                 {label}
@@ -415,7 +416,7 @@ export default function HistoryHomeScreen() {
         }
         contentContainerStyle={{
           paddingHorizontal: spacing.lg,
-          paddingBottom: 100,
+          paddingBottom: getContentBottomPadding(),
           paddingTop: spacing.md,
         }}
         showsVerticalScrollIndicator={false}
@@ -525,23 +526,23 @@ export default function HistoryHomeScreen() {
 }
 
 const styles = StyleSheet.create({
-  pillRow: {
+  segment: {
     flexDirection: 'row',
-    gap: spacing.sm,
-    flexWrap: 'wrap',
-  },
-  pill: {
-    flex: 1,
-    minWidth: 100,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    borderRadius: 20,
+    borderRadius: 12,
     borderWidth: 1,
-    alignItems: 'center',
+    padding: 4,
+    gap: 4,
   },
-  pillText: {
-    fontSize: 13,
-    fontWeight: '600',
+  segmentItem: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  segmentLabel: {
+    fontSize: 14,
+    fontWeight: '700',
   },
   statCard: {
     flexDirection: 'row',

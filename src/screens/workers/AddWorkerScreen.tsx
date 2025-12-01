@@ -102,43 +102,41 @@ export default function AddWorkerScreen({ navigation }: WorkersScreenProps<'AddW
     <Screen>
       <AppHeader title="Add Worker" onBack={navigation.goBack} transparent noBorder />
 
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
-        <ScrollView
-          contentContainerStyle={{ padding: spacing.lg, gap: spacing.md, paddingBottom: spacing['2xl'] }}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
-        >
-          <TextField label="Name" value={name} onChangeText={setName} autoCapitalize="words" />
-          <TextField label="Role" value={role} onChangeText={setRole} autoCapitalize="words" />
+      <ScrollView
+        contentContainerStyle={{ padding: spacing.lg, gap: spacing.md, paddingBottom: spacing['2xl'] }}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
+        <TextField label="Name" value={name} onChangeText={setName} autoCapitalize="words" />
+        <TextField label="Role" value={role} onChangeText={setRole} autoCapitalize="words" />
 
-          <TextField label="Employee ID" value={employeeId} editable={false} hint="Auto-generated" />
+        <TextField label="Employee ID" value={employeeId} editable={false} hint="Auto-generated" />
 
-          <TextField
-            label="Phone number"
-            value={phone}
-            onChangeText={(v) => setPhone(sanitizePhone(v))}
-            keyboardType="phone-pad"
-            placeholder="+9715xxxxxxxx"
-          />
+        <TextField
+          label="Phone number"
+          value={phone}
+          onChangeText={(v) => setPhone(sanitizePhone(v))}
+          keyboardType="phone-pad"
+          placeholder="+9715xxxxxxxx"
+        />
 
-          <TextField
-            label="Salary Due Day (1–28)"
-            value={dueDay}
-            onChangeText={(t) => setDueDay(t.replace(/[^0-9]/g, '').slice(0, 2))}
-            keyboardType="number-pad"
-            hint="Controls reminder & due cycle"
-          />
+        <TextField
+          label="Salary Due Day (1–28)"
+          value={dueDay}
+          onChangeText={(t) => setDueDay(t.replace(/[^0-9]/g, '').slice(0, 2))}
+          keyboardType="number-pad"
+          hint="Controls reminder & due cycle"
+        />
 
-          <TextField
-            label="Monthly Salary (AED)"
-            value={salary}
-            onChangeText={(t) => setSalary(t.replace(/[^0-9.]/g, ''))}
-            keyboardType="decimal-pad"
-          />
+        <TextField
+          label="Monthly Salary (AED)"
+          value={salary}
+          onChangeText={(t) => setSalary(t.replace(/[^0-9.]/g, ''))}
+          keyboardType="decimal-pad"
+        />
 
-          <Button label={saving ? 'Saving…' : 'Save'} onPress={onSave} disabled={!canSave} fullWidth />
-        </ScrollView>
-      </KeyboardAvoidingView>
+        <Button label={saving ? 'Saving…' : 'Save'} onPress={onSave} disabled={!canSave} fullWidth />
+      </ScrollView>
     </Screen>
   );
 }

@@ -14,6 +14,7 @@ import NotificationDaemon from '../../components/system/NotificationDaemon';
 import type { DueSummary } from '../../services/alerts';
 import { logger } from '../../utils/logger';
 import type { DashboardScreenProps } from '../../types/navigation';
+import { getContentBottomPadding } from '../../utils/layout';
 
 const moneyFactory = (format: (n: number) => string) => (n: number) => format(n);
 
@@ -341,7 +342,7 @@ export default function DashboardScreen({ navigation }: DashboardScreenProps) {
         }
         contentContainerStyle={{
           paddingHorizontal: spacing.lg,
-          paddingBottom: 100,
+          paddingBottom: getContentBottomPadding(),
           gap: spacing.md,
         }}
         refreshing={isLoading}

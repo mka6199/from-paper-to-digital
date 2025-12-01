@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, KeyboardAvoidingView, Platform, Text, StyleSheet, Pressable } from 'react-native';
+import { View, KeyboardAvoidingView, Platform, Text, StyleSheet, Pressable, ScrollView } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { showAlert } from '../../utils/alert';
 import Screen from '../../components/layout/Screen';
@@ -84,27 +84,30 @@ export default function AuthScreen() {
 
   return (
     <Screen>
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
-        <View style={styles.container}>
-          <View style={styles.content}>
-            {/* Logo/Icon */}
-            <View style={[styles.iconContainer, { backgroundColor: colors.brand }]}>
-              <Ionicons name="briefcase-outline" size={48} color="#fff" />
-            </View>
+      <ScrollView 
+        contentContainerStyle={styles.scrollContainer}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.content}>
+          {/* Logo/Icon */}
+          <View style={[styles.iconContainer, { backgroundColor: colors.brand }]}>
+            <Ionicons name="briefcase-outline" size={40} color="#fff" />
+          </View>
 
-            {/* Title */}
-            <Text style={[typography.h1, { color: colors.text, textAlign: 'center', marginTop: spacing.lg }]}>
-              {mode === 'login' ? 'Welcome Back' : 'Get Started'}
-            </Text>
-            <Text style={[typography.body, { color: colors.subtext, textAlign: 'center', marginTop: spacing.xs }]}>
-              {mode === 'login' 
-                ? 'Sign in to manage your payroll' 
-                : 'Create an account to get started'}
-            </Text>
+          {/* Title */}
+          <Text style={[typography.h2, { color: colors.text, textAlign: 'center', marginTop: spacing.md }]}>
+            {mode === 'login' ? 'Welcome Back' : 'Get Started'}
+          </Text>
+          <Text style={[typography.small, { color: colors.subtext, textAlign: 'center', marginTop: spacing.xs }]}>
+            {mode === 'login' 
+              ? 'Sign in to manage your payroll' 
+              : 'Create an account to get started'}
+          </Text>
 
             {/* Form */}
-            <Card style={{ marginTop: spacing.xl }}>
-              <View style={{ gap: spacing.md }}>
+            <Card style={{ marginTop: spacing.lg }}>
+              <View style={{ gap: spacing.sm }}>
                 {mode === 'create' && (
                   <>
                     <View style={{ flexDirection: 'row', gap: spacing.sm }}>
@@ -169,7 +172,7 @@ export default function AuthScreen() {
             </Card>
 
             {/* Action Buttons */}
-            <View style={{ gap: spacing.sm, marginTop: spacing.xl }}>
+            <View style={{ gap: spacing.sm, marginTop: spacing.lg }}>
               <Button
                 label={mode === 'login' ? 'Sign In' : 'Create Account'}
                 onPress={onSubmit}
@@ -182,7 +185,7 @@ export default function AuthScreen() {
               {/* Divider */}
               <View style={styles.divider}>
                 <View style={[styles.dividerLine, { backgroundColor: colors.border }]} />
-                <Text style={[typography.small, { color: colors.subtext, paddingHorizontal: spacing.sm }]}>
+                <Text style={[typography.small, { color: colors.subtext, paddingHorizontal: spacing.xs }]}>
                   OR
                 </Text>
                 <View style={[styles.dividerLine, { backgroundColor: colors.border }]} />
@@ -201,8 +204,8 @@ export default function AuthScreen() {
                   }
                 ]}
               >
-                <Ionicons name="logo-google" size={20} color="#DB4437" />
-                <Text style={[typography.body, { color: colors.text, marginLeft: spacing.sm }]}>
+                <Ionicons name="logo-google" size={18} color="#DB4437" />
+                <Text style={[typography.small, { color: colors.text, marginLeft: spacing.xs }]}>
                   Continue with Google
                 </Text>
               </Pressable>
@@ -221,31 +224,30 @@ export default function AuthScreen() {
             </View>
 
             {/* Footer */}
-            <Text style={[typography.small, { color: colors.subtext, textAlign: 'center', marginTop: spacing.xl }]}>
+            <Text style={[typography.small, { color: colors.subtext, textAlign: 'center', marginTop: spacing.lg, marginBottom: spacing.lg }]}>
               From Paper to Digital
             </Text>
           </View>
-        </View>
-      </KeyboardAvoidingView>
+        </ScrollView>
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    justifyContent: 'center',
-    paddingHorizontal: spacing.lg,
+  scrollContainer: {
+    flexGrow: 1,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xl,
   },
   content: {
     width: '100%',
-    maxWidth: 440,
+    maxWidth: 400,
     alignSelf: 'center',
   },
   iconContainer: {
-    width: 96,
-    height: 96,
-    borderRadius: 48,
+    width: 80,
+    height: 80,
+    borderRadius: 40,
     alignItems: 'center',
     justifyContent: 'center',
     alignSelf: 'center',
@@ -253,7 +255,7 @@ const styles = StyleSheet.create({
   divider: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginVertical: spacing.sm,
+    marginVertical: spacing.xs,
   },
   dividerLine: {
     flex: 1,
@@ -263,7 +265,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: spacing.md,
+    paddingVertical: spacing.sm,
     borderRadius: 8,
     borderWidth: 1,
   },
@@ -271,6 +273,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    marginTop: spacing.md,
+    marginTop: spacing.sm,
   },
 });

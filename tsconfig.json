@@ -7,6 +7,10 @@
     "noEmit": true,
     "module": "esnext",
     "target": "esnext",
-    "jsx": "react-native"
-  }
+    "jsx": "react-native",
+    "moduleSuffixes": [".native", ".ios", ".android", ".web", ""]
+  },
+  "exclude": [
+    "node_modules"
+  ]
 }

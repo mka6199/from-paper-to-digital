@@ -141,23 +141,19 @@ export default function EditWorkerScreen({ route, navigation }: any) {
         noBorder
       />
 
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        style={{ flex: 1 }}
+      <ScrollView
+        contentContainerStyle={{ padding: spacing.lg, gap: spacing.md }}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
       >
-        <ScrollView
-          contentContainerStyle={{ padding: spacing.lg, gap: spacing.md }}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
-        >
-          {!worker && (
-            <Text style={{ color: colors.subtext }}>
-              Loading worker details…
-            </Text>
-          )}
+        {!worker && (
+          <Text style={{ color: colors.subtext }}>
+            Loading worker details…
+          </Text>
+        )}
 
-          {worker && (
-            <>
+        {worker && (
+          <>
               <TextField label="Name" value={name} onChangeText={setName} />
               <TextField label="Role" value={role} onChangeText={setRole} />
 
@@ -222,7 +218,6 @@ export default function EditWorkerScreen({ route, navigation }: any) {
             </>
           )}
         </ScrollView>
-      </KeyboardAvoidingView>
     </Screen>
   );
 }

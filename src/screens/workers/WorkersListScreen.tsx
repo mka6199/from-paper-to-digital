@@ -8,8 +8,6 @@ import {
   RefreshControl,
   Platform,
 } from 'react-native';
-import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Screen from '../../components/layout/Screen';
 import Card from '../../components/primitives/Card';
 import WorkerListItem from './components/WorkerListItem';
@@ -22,6 +20,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { useTheme } from '../../theme/ThemeProvider';
 import { logger } from '../../utils/logger';
 import type { WorkersScreenProps } from '../../types/navigation';
+import { getContentBottomPadding, getFABBottomPosition } from '../../utils/layout';
 
 type Filter = 'active' | 'former';
 
@@ -33,10 +32,6 @@ export default function WorkersListScreen({ navigation }: WorkersScreenProps<'Wo
   const [filter, setFilter] = React.useState<Filter>('active');
   const [error, setError] = React.useState<string | null>(null);
   const [searchQuery, setSearchQuery] = React.useState('');
-
-  const tabBarHeight = useBottomTabBarHeight?.() ?? 0;
-  const insets = useSafeAreaInsets();
-  const contentBottom = Math.max(tabBarHeight + insets.bottom + spacing.xl, 120);
 
   useFocusEffect(
     React.useCallback(() => {
@@ -178,7 +173,7 @@ export default function WorkersListScreen({ navigation }: WorkersScreenProps<'Wo
         contentContainerStyle={{
           paddingHorizontal: spacing.lg,
           paddingTop: spacing.md,
-          paddingBottom: contentBottom,
+          paddingBottom: getContentBottomPadding(),
           gap: spacing.md,
         }}
         maxToRenderPerBatch={10}
@@ -223,7 +218,7 @@ export default function WorkersListScreen({ navigation }: WorkersScreenProps<'Wo
             style={({ pressed }) => [
               styles.fab,
               {
-                bottom: tabBarHeight + insets.bottom + spacing.md,
+                bottom: getFABBottomPosition(),
                 backgroundColor: colors.brand,
                 shadowColor: colors.text,
               },

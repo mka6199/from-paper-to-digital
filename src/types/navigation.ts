@@ -84,6 +84,8 @@ export type SettingsStackParamList = {
   SettingsHome: undefined;
   Profile: undefined;
   EditProfile: undefined;
+  ExportData: undefined;
+  NotificationPreferences: undefined;
 };
 
 // Admin stack

@@ -3,6 +3,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { ThemeProvider } from './src/theme/ThemeProvider';
 import AuthProvider from './src/context/AuthProvider';
 import SyncProvider from './src/context/SyncProvider';
+import NotificationPreferencesProvider from './src/context/NotificationPreferencesProvider';
 import RootNavigator from './src/navigation/RootNavigator';
 import { ErrorBoundary } from './src/components/system/ErrorBoundary';
 
@@ -15,9 +16,11 @@ export default function App() {
         <ThemeProvider>
           <SafeAreaProvider>
             <AuthProvider>
-              <SyncProvider>
-                <RootNavigator />
-              </SyncProvider>
+              <NotificationPreferencesProvider>
+                <SyncProvider>
+                  <RootNavigator />
+                </SyncProvider>
+              </NotificationPreferencesProvider>
             </AuthProvider>
           </SafeAreaProvider>
         </ThemeProvider>

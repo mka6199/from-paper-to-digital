@@ -24,20 +24,20 @@ import Constants from 'expo-constants';
 import { useTheme } from '../../theme/ThemeProvider';
 import { useCurrency } from '../../context/CurrencyProvider';
 import { upsertMyProfile } from '../../services/profile';
-import { subscribeMyPaymentsInRange, monthRange } from '../../services/payments';
-import * as FileSystem from 'expo-file-system';
-import * as Sharing from 'expo-sharing';
 import { logger } from '../../utils/logger';
 import { getForceOfflineMode, setForceOfflineMode } from '../../services/offline';
+import { getContentBottomPadding } from '../../utils/layout';
+import { NotificationPreferencesContext } from '../../context/NotificationPreferencesProvider';
 
 export default function SettingsScreen({ navigation }: any) {
   const { profile } = React.useContext(AuthContext);
   const { colors, mode, setMode } = useTheme();
   const { currency, setCurrency, supported, format } = useCurrency();
+  const { prefs: notificationPrefs, ready: notificationReady, updatePrefs: updateNotificationPrefs } = React.useContext(NotificationPreferencesContext);
 
   const [darkMode, setDarkMode] = React.useState(mode === 'dark');
-  const [notificationsEnabled, setNotificationsEnabled] = React.useState(true);
   const [forceOffline, setForceOffline] = React.useState(false);
+  const [updatingNotifications, setUpdatingNotifications] = React.useState(false);
 
   const [salaryText, setSalaryText] = React.useState(
     profile?.salaryMonthlyAED != null ? String(profile.salaryMonthlyAED) : ''
@@ -45,12 +45,13 @@ export default function SettingsScreen({ navigation }: any) {
   const [savingSalary, setSavingSalary] = React.useState(false);
   const [resetBusy, setResetBusy] = React.useState(false);
 
+  const notificationsEnabled = !notificationPrefs.muted;
+
   React.useEffect(() => {
     (async () => {
       try {
-        const [dm, ntf, offline] = await Promise.all([
+        const [dm, offline] = await Promise.all([
           AsyncStorage.getItem('settings.darkMode'),
-          AsyncStorage.getItem('settings.notifications'),
           getForceOfflineMode(),
         ]);
         if (dm !== null) {
@@ -58,7 +59,6 @@ export default function SettingsScreen({ navigation }: any) {
           setDarkMode(on);
           setMode(on ? 'dark' : 'light');
         }
-        if (ntf !== null) setNotificationsEnabled(ntf === '1');
         setForceOffline(offline);
       } catch {}
     })();
@@ -97,9 +97,16 @@ export default function SettingsScreen({ navigation }: any) {
     persist('settings.darkMode', v ? '1' : '0');
   };
 
-  const onToggleNotifications = (v: boolean) => {
-    setNotificationsEnabled(v);
-    persist('settings.notifications', v ? '1' : '0');
+  const onToggleNotifications = async (v: boolean) => {
+    if (!notificationReady) return;
+    setUpdatingNotifications(true);
+    try {
+      await updateNotificationPrefs({ muted: !v });
+    } catch (e: any) {
+      showAlert('Error', e?.message ?? 'Could not update notification preference.');
+    } finally {
+      setUpdatingNotifications(false);
+    }
   };
 
   const onToggleForceOffline = async (v: boolean) => {
@@ -114,16 +121,31 @@ export default function SettingsScreen({ navigation }: any) {
   };
 
   const pickCurrency = () => {
-    showAlert('Currency', 'Choose your currency', [
-      ...supported.map((c) => ({
-        text: `${c} (${format(100, c as any)})`,
-        onPress: () => {
-          setCurrency(c);
-          persist('settings.currency', c);
-        },
-      })),
-      { text: 'Cancel', style: 'cancel' },
-    ]);
+    if (Platform.OS === 'web') {
+      // On web, create a custom selection UI
+      const currencyOptions = supported.map((c) => `${c} (${format(100, c as any)})`).join('\n');
+      const selected = prompt(`Choose your currency:\n\n${currencyOptions}\n\nEnter currency code (e.g., AED, USD, EUR):`);
+      if (selected) {
+        const code = selected.toUpperCase().trim();
+        if (supported.includes(code as any)) {
+          setCurrency(code as any);
+          persist('settings.currency', code);
+        } else {
+          showAlert('Invalid Currency', `"${selected}" is not a valid currency code.`);
+        }
+      }
+    } else {
+      showAlert('Currency', 'Choose your currency', [
+        ...supported.map((c) => ({
+          text: `${c} (${format(100, c as any)})`,
+          onPress: () => {
+            setCurrency(c);
+            persist('settings.currency', c);
+          },
+        })),
+        { text: 'Cancel', style: 'cancel' },
+      ]);
+    }
   };
 
   const showAbout = () => {
@@ -183,137 +205,6 @@ export default function SettingsScreen({ navigation }: any) {
     }
   }
 
-  async function exportPaymentHistory() {
-    try {
-      const { start, end } = monthRange();
-      const ymd = (d: Date) => {
-        const y = d.getFullYear();
-        const m = `${d.getMonth() + 1}`.padStart(2, '0');
-        const day = `${d.getDate()}`.padStart(2, '0');
-        return `${y}-${m}-${day}`;
-      };
-
-      // Get this month's payments with proper async handling
-      const payments = await new Promise<any[]>((resolve, reject) => {
-        let resolved = false;
-        const timeout = setTimeout(() => {
-          if (!resolved) {
-            resolved = true;
-            reject(new Error('Timeout loading payments'));
-          }
-        }, 10000); // 10 second timeout
-
-        const unsub = subscribeMyPaymentsInRange({ start, end }, (list) => {
-          if (!resolved) {
-            resolved = true;
-            clearTimeout(timeout);
-            unsub();
-            resolve(list);
-          }
-        });
-      });
-
-      if (!payments || payments.length === 0) {
-        showAlert('No Data', 'No payments found for this month.');
-        return;
-      }
-
-      const header = 'Date,Worker,Amount,Bonus,Method,Note\n';
-      const rows = payments
-        .map((p) => {
-          // Handle Firestore Timestamp properly
-          const d = p.paidAt?.toDate ? p.paidAt.toDate() : (p.paidAt instanceof Date ? p.paidAt : null);
-          const dateStr = d ? ymd(d) : '—';
-          const amt = Number(p.amount || 0);
-          const bonus = Number(p.bonus || 0);
-          const method = p.method || '—';
-          const workerName = p.workerName || p.workerId || 'Unknown';
-          const note = (p.note || '').replace(/"/g, '""').replace(/\n/g, ' ');
-          return `${dateStr},"${workerName}",${amt},${bonus},"${method}","${note}"`;
-        })
-        .join('\n');
-
-      const csv = header + rows;
-      const fileName = `payment-history-${ymd(start)}-to-${ymd(end)}.csv`;
-
-      if (Platform.OS === 'web') {
-        // Web: Use browser download
-        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-        const link = document.createElement('a');
-        const url = URL.createObjectURL(blob);
-        link.setAttribute('href', url);
-        link.setAttribute('download', fileName);
-        link.style.visibility = 'hidden';
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        URL.revokeObjectURL(url);
-        showAlert('Success', 'CSV file downloaded successfully!');
-      } else {
-        // Mobile: Use React Native Share API
-        try {
-          const { Share } = require('react-native');
-          
-          // Try native Share API first (most reliable)
-          try {
-            await Share.share({
-              message: csv,
-              title: 'Payment History Export',
-            });
-            logger.log('Shared via React Native Share');
-            return;
-          } catch (shareError: any) {
-            logger.log('React Native Share failed, trying FileSystem:', shareError.message);
-          }
-
-          // Fallback to FileSystem if Share fails
-          try {
-            const baseDir = FileSystem.documentDirectory || FileSystem.cacheDirectory;
-            
-            if (!baseDir) {
-              throw new Error('No writable directory available');
-            }
-
-            const filePath = baseDir + fileName;
-            
-            logger.log('Writing CSV to:', filePath);
-            
-            await FileSystem.writeAsStringAsync(filePath, csv, {
-              encoding: FileSystem.EncodingType.UTF8,
-            });
-            
-            logger.log('File written successfully');
-
-            const canShare = await Sharing.isAvailableAsync();
-            
-            if (canShare) {
-              logger.log('Sharing file...');
-              await Sharing.shareAsync(filePath, {
-                mimeType: 'text/csv',
-                dialogTitle: 'Export Payment History',
-                UTI: 'public.comma-separated-values-text',
-              });
-            } else {
-              showAlert('Export Successful', `File saved to:\n${filePath}`);
-            }
-          } catch (fileError: any) {
-            logger.error('FileSystem error:', fileError);
-            // Last resort: copy to clipboard
-            const { Clipboard } = require('react-native');
-            await Clipboard.setString(csv);
-            showAlert('Export', 'CSV data copied to clipboard. You can paste it into a spreadsheet app.');
-          }
-        } catch (e: any) {
-          logger.error('All export methods failed:', e);
-          throw new Error(`Export failed: ${e.message || 'All methods unavailable'}`);
-        }
-      }
-    } catch (e: any) {
-      logger.error('CSV export failed:', e);
-      showAlert('Export Failed', e?.message || String(e));
-    }
-  }
-
   return (
     <Screen>
       <AppHeader title="Settings" transparent noBorder />
@@ -322,7 +213,7 @@ export default function SettingsScreen({ navigation }: any) {
         contentContainerStyle={{
           paddingHorizontal: spacing.lg,
           paddingTop: spacing.md,
-          paddingBottom: spacing['2xl'],
+          paddingBottom: getContentBottomPadding(),
           gap: spacing.lg,
         }}
         showsVerticalScrollIndicator={false}
@@ -406,10 +297,19 @@ export default function SettingsScreen({ navigation }: any) {
                 <Switch
                   value={notificationsEnabled}
                   onValueChange={onToggleNotifications}
+                  disabled={!notificationReady || updatingNotifications}
                   trackColor={{ false: colors.border, true: colors.brand }}
                   thumbColor="#fff"
                 />
               </View>
+
+              <Pressable style={styles.item} onPress={() => navigation.navigate('NotificationPreferences')}>
+                <View style={styles.itemLeft}>
+                  <Ionicons name="options-outline" size={22} color={colors.brand} />
+                  <Text style={[styles.itemText, { color: colors.text }]}>Notification Preferences</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={18} color={colors.subtext} />
+              </Pressable>
 
               <View style={styles.item}>
                 <View style={styles.itemLeft}>
@@ -476,11 +376,11 @@ export default function SettingsScreen({ navigation }: any) {
           </Text>
           <Card>
             <View style={{ gap: spacing.xs }}>
-              <Pressable style={styles.item} onPress={exportPaymentHistory}>
+              <Pressable style={styles.item} onPress={() => navigation.navigate('ExportData')}>
                 <View style={styles.itemLeft}>
                   <Ionicons name="download-outline" size={22} color={colors.brand} />
                   <Text style={[styles.itemText, { color: colors.text }]}>
-                    Export Payment History (CSV)
+                    Export Payment History
                   </Text>
                 </View>
                 <Ionicons name="chevron-forward" size={18} color={colors.subtext} />
