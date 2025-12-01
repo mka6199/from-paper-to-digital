@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, FlatList, StyleSheet, Alert } from 'react-native';
+import { View, Text, FlatList, StyleSheet } from 'react-native';
 import Screen from '../../components/layout/Screen';
 import AppHeader from '../../components/layout/AppHeader';
 import Card from '../../components/primitives/Card';
@@ -7,7 +7,8 @@ import Button from '../../components/primitives/Button';
 import TextField from '../../components/primitives/TextField';
 import { spacing, typography } from '../../theme/tokens';
 import { findUserByEmail, subscribePaymentsByOwnerUid, AdminUser } from '../../services/admin';
-import { signOut } from '../../../firebase';
+import { signOut } from '../../config/firebase';
+import { showAlert } from '../../utils/alert';
 import AdminGate from '../../components/admin/AdminGate';
 import { useTheme } from '../../theme/ThemeProvider';
 
@@ -34,14 +35,14 @@ export default function AdminPaymentsScreen({ navigation }: any) {
   async function onLoadUser() {
     const email = queryEmail.trim().toLowerCase();
     if (!isEmail(email)) {
-      Alert.alert('Invalid email', 'Please enter a valid email.');
+      showAlert('Invalid email', 'Please enter a valid email.');
       return;
     }
     setBusy(true);
     try {
       const u = await findUserByEmail(email);
       if (!u) {
-        Alert.alert('Not found', 'No user found for that email.');
+        showAlert('Not found', 'No user found for that email.');
         setPickedUser(null);
       } else {
         setPickedUser(u);
@@ -55,7 +56,7 @@ export default function AdminPaymentsScreen({ navigation }: any) {
 
   const header = (
     <View style={{ paddingHorizontal: spacing.lg, gap: spacing.md }}>
-      <AppHeader title="Admin • Payments by User" onBack={() => navigation.goBack()} />
+      <AppHeader title="Admin • Payments by User" onBack={() => navigation.goBack()} transparent noBorder />
       <View style={{ alignItems: 'flex-end' }}>
         <Button label="Log out" variant="outline" tone="danger" onPress={onLogout} />
       </View>
@@ -114,7 +115,7 @@ export default function AdminPaymentsScreen({ navigation }: any) {
           keyExtractor={(i) => i.id}
           renderItem={renderItem}
           ListHeaderComponent={header}
-          contentContainerStyle={{ padding: spacing.lg, gap: spacing.md, paddingBottom: spacing['2xl'] }}
+          contentContainerStyle={{ padding: spacing.lg, gap: spacing.md, paddingBottom: 120 }}
           showsVerticalScrollIndicator={false}
           ListEmptyComponent={
             <Text style={[typography.small, { textAlign: 'center', color: colors.subtext }]}>
@@ -137,3 +138,4 @@ const styles = StyleSheet.create({
     gap: spacing.md,
   },
 });
+

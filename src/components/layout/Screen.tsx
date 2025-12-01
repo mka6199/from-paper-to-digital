@@ -10,6 +10,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { spacing } from '../../theme/tokens';
 import { useTheme } from '../../theme/ThemeProvider';
+import OfflineIndicator from '../system/OfflineIndicator';
 
 type Props = {
   children: React.ReactNode;
@@ -44,6 +45,7 @@ export default function Screen({
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: bg }}>
       <StatusBar barStyle={barStyle} />
+      <OfflineIndicator />
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}

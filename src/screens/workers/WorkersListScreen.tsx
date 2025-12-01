@@ -9,32 +9,49 @@ import {
   Platform,
 } from 'react-native';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Screen from '../../components/layout/Screen';
 import Card from '../../components/primitives/Card';
-import WorkerListItem from '../../components/composites/WorkerListItem';
+import WorkerListItem from './components/WorkerListItem';
+import TextField from '../../components/primitives/TextField';
+import { EmptyState } from '../../components/feedback/EmptyState';
+import { SkeletonCard } from '../../components/feedback/SkeletonCard';
 import { spacing, typography } from '../../theme/tokens';
 import { subscribeMyWorkers, listWorkers, Worker } from '../../services/workers';
 import { useFocusEffect } from '@react-navigation/native';
 import { useTheme } from '../../theme/ThemeProvider';
+import { logger } from '../../utils/logger';
+import type { WorkersScreenProps } from '../../types/navigation';
 
 type Filter = 'active' | 'former';
 
-export default function WorkersListScreen({ navigation }: any) {
+export default function WorkersListScreen({ navigation }: WorkersScreenProps<'WorkersList'>) {
   const { colors } = useTheme();
 
   const [rows, setRows] = React.useState<Worker[]>([]);
   const [loading, setLoading] = React.useState(false);
   const [filter, setFilter] = React.useState<Filter>('active');
+  const [error, setError] = React.useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = React.useState('');
 
   const tabBarHeight = useBottomTabBarHeight?.() ?? 0;
+  const insets = useSafeAreaInsets();
+  const contentBottom = Math.max(tabBarHeight + insets.bottom + spacing.xl, 120);
 
   useFocusEffect(
     React.useCallback(() => {
       let unsub: undefined | (() => void);
       try {
-        unsub = subscribeMyWorkers((list) => setRows(list), { status: filter });
+        unsub = subscribeMyWorkers(
+          (list) => {
+            setRows(list);
+            setError(null);
+          },
+          { status: filter }
+        );
       } catch (e) {
-        console.warn('subscribeMyWorkers failed:', e);
+        logger.warn('subscribeMyWorkers failed:', e);
+        setError('Unable to sync workers. Pull to refresh to retry.');
       }
       return () => unsub && unsub();
     }, [filter])
@@ -45,10 +62,22 @@ export default function WorkersListScreen({ navigation }: any) {
     try {
       const data = await listWorkers({ status: filter });
       setRows(data);
+      setError(null);
     } finally {
       setLoading(false);
     }
   }, [filter]);
+
+  const filteredRows = React.useMemo(() => {
+    if (!searchQuery.trim()) return rows;
+    const query = searchQuery.toLowerCase();
+    return rows.filter(
+      (w) =>
+        w.name?.toLowerCase().includes(query) ||
+        w.role?.toLowerCase().includes(query) ||
+        w.employeeId?.toLowerCase().includes(query)
+    );
+  }, [rows, searchQuery]);
 
   const renderItem = ({ item }: { item: Worker }) => (
     <Card
@@ -82,6 +111,26 @@ export default function WorkersListScreen({ navigation }: any) {
   const Toggle = (
     <View style={{ paddingHorizontal: spacing.lg, paddingTop: spacing.lg }}>
       <Text style={[typography.h1, { color: colors.text }]}>Workers</Text>
+
+      {error ? (
+        <Text
+          style={{
+            color: colors.danger ?? '#B91C1C',
+            marginTop: spacing.xs,
+          }}
+        >
+          {error}
+        </Text>
+      ) : null}
+
+      <View style={{ marginTop: spacing.md }}>
+        <TextField
+          placeholder="Search by name, role, or ID..."
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+          iconLeft="search-outline"
+        />
+      </View>
 
       <View
         style={[
@@ -121,7 +170,7 @@ export default function WorkersListScreen({ navigation }: any) {
   return (
     <Screen>
       <FlatList
-        data={rows}
+        data={filteredRows}
         keyExtractor={(w) => String(w.id)}
         renderItem={renderItem}
         ItemSeparatorComponent={() => <View style={{ height: spacing.lg }} />}
@@ -129,9 +178,12 @@ export default function WorkersListScreen({ navigation }: any) {
         contentContainerStyle={{
           paddingHorizontal: spacing.lg,
           paddingTop: spacing.md,
-          paddingBottom: spacing['2xl'] + 80, 
+          paddingBottom: contentBottom,
           gap: spacing.md,
         }}
+        maxToRenderPerBatch={10}
+        windowSize={5}
+        removeClippedSubviews={Platform.OS === 'android'}
         refreshControl={
           <RefreshControl
             refreshing={loading}
@@ -143,18 +195,21 @@ export default function WorkersListScreen({ navigation }: any) {
           />
         }
         ListEmptyComponent={
-          !loading ? (
-            <Text
-              style={[
-                typography.small,
-                { textAlign: 'center', marginTop: spacing.xl, color: colors.subtext },
-              ]}
-            >
-              {filter === 'active'
-                ? 'No active workers yet. Tap the + button to add one.'
-                : 'No former workers.'}
-            </Text>
-          ) : null
+          loading ? (
+            <View style={{ paddingTop: spacing.lg }}>
+              <SkeletonCard />
+              <SkeletonCard />
+              <SkeletonCard />
+            </View>
+          ) : (
+            <EmptyState
+              icon="people-outline"
+              title={filter === 'active' ? 'No active workers' : 'No former workers'}
+              message={filter === 'active' ? 'Add your first worker to get started' : undefined}
+              actionLabel={filter === 'active' ? 'Add Worker' : undefined}
+              onAction={filter === 'active' ? () => navigation.navigate('AddWorker') : undefined}
+            />
+          )
         }
         showsVerticalScrollIndicator={false}
       />
@@ -168,7 +223,7 @@ export default function WorkersListScreen({ navigation }: any) {
             style={({ pressed }) => [
               styles.fab,
               {
-                bottom: tabBarHeight + spacing.lg,
+                bottom: tabBarHeight + insets.bottom + spacing.md,
                 backgroundColor: colors.brand,
                 shadowColor: colors.text,
               },

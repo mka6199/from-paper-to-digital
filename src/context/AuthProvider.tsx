@@ -1,8 +1,7 @@
 import React from 'react';
 import { onAuthStateChanged, User, signOut } from 'firebase/auth';
-import { auth } from '../../firebase';
+import { auth } from '../config/firebase';
 import { subscribeMyProfile, UserProfileDoc } from '../services/profile';
-import { resetToAuth } from '../navigation/nav';
 
 const FORCE_SIGN_OUT_ON_BOOT = false;
 
@@ -40,7 +39,6 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
         setProfile(null);
         setIsAdmin(false);
         setProfileReady(false);
-        resetToAuth();
         return;
       }
       setUser(u);
@@ -48,7 +46,6 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
         setProfile(null);
         setIsAdmin(false);
         setProfileReady(false);
-        resetToAuth();
         return;
       }
     });

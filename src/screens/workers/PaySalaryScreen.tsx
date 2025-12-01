@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { View, Alert, Text, StyleSheet } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { View, Text, StyleSheet } from 'react-native';
 import Screen from '../../components/layout/Screen';
 import AppHeader from '../../components/layout/AppHeader';
 import TextField from '../../components/primitives/TextField';
@@ -9,11 +9,13 @@ import { spacing, typography } from '../../theme/tokens';
 import { getWorker, Worker } from '../../services/workers';
 import { useCurrency } from '../../context/CurrencyProvider';
 import { useTheme } from '../../theme/ThemeProvider';
+import { showAlert } from '../../utils/alert';
 
-type RouteParams = { id: string };
+type RouteParams = { workerId?: string; id?: string };
 
 export default function PaySalaryScreen({ route, navigation }: any) {
-  const { id } = route.params as RouteParams;
+  const params = (route.params as RouteParams) || {};
+  const targetId = params.workerId ?? params.id;
   const { colors } = useTheme();
   const { format } = useCurrency();
 
@@ -22,32 +24,53 @@ export default function PaySalaryScreen({ route, navigation }: any) {
   const [bonus, setBonus] = useState('');
   const [method, setMethod] = useState<'cash' | 'bank'>('bank');
   const [busy, setBusy] = useState(false);
+  const mountedRef = useRef(true);
 
   useEffect(() => {
-    getWorker(id)
-      .then((w) => setWorker(w))
-      .catch(() => setWorker(null));
-  }, [id]);
+    if (!targetId) {
+      setWorker(null);
+      return;
+    }
+    mountedRef.current = true;
+    getWorker(targetId)
+      .then((w) => {
+        if (mountedRef.current) setWorker(w);
+      })
+      .catch(() => {
+        if (mountedRef.current) setWorker(null);
+      });
+    return () => {
+      mountedRef.current = false;
+    };
+  }, [targetId]);
 
-  const amountNum = Number(amount || 0);
-  const bonusNum = Number(bonus || 0);
+  const sanitizeDecimal = (value: string) => {
+    const cleaned = value.replace(/[^0-9.]/g, '');
+    const [head, ...rest] = cleaned.split('.');
+    return head + (rest.length ? '.' + rest.join('').replace(/\./g, '') : '');
+  };
+
+  const amountNum = parseFloat(amount || '0');
+  const bonusNum = parseFloat(bonus || '0');
   const canContinue = amountNum > 0 && !!worker;
 
   const goToOtp = () => {
+    if (busy) return;
+    setBusy(true);
     if (!worker) {
-      Alert.alert('Error', 'Worker not found.');
-      return;
+      showAlert('Error', 'Worker not found.');
+      return setBusy(false);
     }
     if (!worker.phone) {
-      Alert.alert(
+      showAlert(
         'Missing phone number',
         'This worker does not have a phone number. Please edit the worker and add one before sending an OTP.'
       );
-      return;
+      return setBusy(false);
     }
     if (!(amountNum > 0)) {
-      Alert.alert('Invalid amount', 'Please enter a valid amount to pay.');
-      return;
+      showAlert('Invalid amount', 'Please enter a valid amount to pay.');
+      return setBusy(false);
     }
 
     navigation.navigate('OTPConfirm', {
@@ -59,6 +82,8 @@ export default function PaySalaryScreen({ route, navigation }: any) {
       method,
       month: new Date().toISOString().slice(0, 7),
     });
+
+    setBusy(false);
   };
 
   return (
@@ -66,6 +91,8 @@ export default function PaySalaryScreen({ route, navigation }: any) {
       <AppHeader
         title="Pay Salary"
         onBack={() => navigation.goBack()}
+        transparent
+        noBorder
       />
 
       <View style={{ padding: spacing.lg, gap: spacing.lg }}>
@@ -98,15 +125,15 @@ export default function PaySalaryScreen({ route, navigation }: any) {
         <TextField
           label="Amount to pay (AED)"
           value={amount}
-          onChangeText={setAmount}
-          keyboardType="number-pad"
+          onChangeText={(val) => setAmount(sanitizeDecimal(val))}
+          keyboardType="decimal-pad"
         />
 
         <TextField
           label="Bonus (optional)"
           value={bonus}
-          onChangeText={setBonus}
-          keyboardType="number-pad"
+          onChangeText={(val) => setBonus(sanitizeDecimal(val))}
+          keyboardType="decimal-pad"
         />
 
         {/* Bank / Cash toggle with highlight */}

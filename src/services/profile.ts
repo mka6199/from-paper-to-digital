@@ -1,5 +1,5 @@
 import { getAuth } from 'firebase/auth';
-import { db, ensureAuth } from '../../firebase';
+import { db, ensureAuth } from '../config/firebase';
 import { doc, getDoc, setDoc, serverTimestamp, updateDoc, Timestamp, onSnapshot } from 'firebase/firestore';
 
 export type UserProfile = {

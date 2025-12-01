@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Alert } from 'react-native';
+import { View } from 'react-native';
 import Screen from '../../components/layout/Screen';
 import AppHeader from '../../components/layout/AppHeader';
 import Card from '../../components/primitives/Card';
@@ -8,6 +8,7 @@ import Button from '../../components/primitives/Button';
 import { spacing } from '../../theme/tokens';
 import { getWorker } from '../../services/workers';
 import { adminUpdateWorker } from '../../services/admin';
+import { showAlert } from '../../utils/alert';
 import AdminGate from '../../components/admin/AdminGate';
 import { useTheme } from '../../theme/ThemeProvider';
 
@@ -43,7 +44,7 @@ export default function AdminEditWorkerScreen({ route, navigation }: any) {
 
   async function onSave() {
     if (!canSave) {
-      Alert.alert('Invalid fields', 'Please fill all fields with valid values.');
+      showAlert('Invalid fields', 'Please fill all fields with valid values.');
       return;
     }
     try {
@@ -54,14 +55,14 @@ export default function AdminEditWorkerScreen({ route, navigation }: any) {
       });
       navigation.goBack();
     } catch (e: any) {
-      Alert.alert('Failed to save', e?.message ?? 'Please try again.');
+      showAlert('Failed to save', e?.message ?? 'Please try again.');
     }
   }
 
   return (
     <AdminGate title="Admin Panel">
       <Screen scroll padded>
-        <AppHeader title="Admin • Edit Worker" onBack={() => navigation.goBack()} />
+        <AppHeader title="Admin • Edit Worker" onBack={() => navigation.goBack()} transparent noBorder />
         <Card style={{ borderColor: colors.border, backgroundColor: colors.surface }}>
           <View style={{ gap: spacing.md }}>
             <TextField label="Full name" value={name} onChangeText={setName} />
@@ -76,3 +77,4 @@ export default function AdminEditWorkerScreen({ route, navigation }: any) {
     </AdminGate>
   );
 }
+

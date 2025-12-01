@@ -1,20 +1,33 @@
 import React from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { spacing } from '../../theme/tokens';
+import { spacing, typography } from '../../theme/tokens';
 import { useTheme } from '../../theme/ThemeProvider';
 
 type Props = {
   title?: string;
+  subtitle?: string;
   /** Called when back is pressed. If omitted, no back button is shown. */
   onBack?: () => void;
-  /** Optional text label shown to the right of the back chevron, e.g. "Settings" */
-  backLabel?: string;
   /** Optional element rendered on the right side (e.g., a button) */
   right?: React.ReactNode;
+  /** If true, removes the bottom border */
+  noBorder?: boolean;
+  /** If true, increases vertical padding for larger header */
+  large?: boolean;
+  /** If true, makes background transparent */
+  transparent?: boolean;
 };
 
-export default function AppHeader({ title, onBack, backLabel, right }: Props) {
+export default function AppHeader({ 
+  title, 
+  subtitle, 
+  onBack, 
+  right, 
+  noBorder,
+  large,
+  transparent
+}: Props) {
   const { colors } = useTheme();
 
   return (
@@ -23,36 +36,54 @@ export default function AppHeader({ title, onBack, backLabel, right }: Props) {
         styles.wrap,
         {
           borderBottomColor: colors.border,
-          backgroundColor: colors.surface,
+          backgroundColor: transparent ? 'transparent' : colors.surface,
+          paddingVertical: large ? spacing.xl : spacing.md,
         },
+        noBorder && { borderBottomWidth: 0 },
       ]}
     >
+      {/* Left side - Back button */}
       <View style={styles.left}>
-        {onBack ? (
+        {onBack && (
           <Pressable
             accessibilityRole="button"
+            accessibilityLabel="Go back"
             onPress={onBack}
+            hitSlop={8}
             style={({ pressed }) => [
               styles.backBtn,
-              pressed && { opacity: 0.85 },
+              { opacity: pressed ? 0.6 : 1 },
             ]}
           >
-            <Ionicons name="chevron-back" size={24} color={colors.text} />
-            {backLabel ? (
-              <Text style={[styles.backLabel, { color: colors.text }]}>
-                {backLabel}
-              </Text>
-            ) : null}
+            <Ionicons name="arrow-back" size={24} color={colors.text} />
           </Pressable>
-        ) : null}
+        )}
       </View>
 
-      {!!title && (
-        <Text style={[styles.title, { color: colors.text }]} numberOfLines={1}>
-          {title}
-        </Text>
-      )}
+      {/* Center - Title and subtitle */}
+      <View style={styles.center}>
+        {!!title && (
+          <Text 
+            style={[
+              large ? typography.h1 : styles.title, 
+              { color: colors.text }
+            ]} 
+            numberOfLines={1}
+          >
+            {title}
+          </Text>
+        )}
+        {!!subtitle && (
+          <Text 
+            style={[typography.small, { color: colors.subtext, marginTop: 2 }]} 
+            numberOfLines={1}
+          >
+            {subtitle}
+          </Text>
+        )}
+      </View>
 
+      {/* Right side - Optional action */}
       <View style={styles.right}>{right}</View>
     </View>
   );
@@ -61,14 +92,34 @@ export default function AppHeader({ title, onBack, backLabel, right }: Props) {
 const styles = StyleSheet.create({
   wrap: {
     paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    alignItems: 'center',
     flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
   },
-  left: { width: 120, flexDirection: 'row', alignItems: 'center' },
-  right: { width: 120, alignItems: 'flex-end' },
-  title: { flex: 1, textAlign: 'center', fontSize: 18, fontWeight: '700' },
-  backBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingRight: 8 },
-  backLabel: { fontSize: 16, fontWeight: '600' },
+  left: { 
+    width: 40,
+    justifyContent: 'center',
+  },
+  center: { 
+    flex: 1,
+    justifyContent: 'center',
+  },
+  right: { 
+    width: 40,
+    alignItems: 'flex-end',
+    justifyContent: 'center',
+  },
+  title: { 
+    fontSize: 20, 
+    fontWeight: '700',
+    letterSpacing: -0.3,
+  },
+  backBtn: { 
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: -8,
+  },
 });

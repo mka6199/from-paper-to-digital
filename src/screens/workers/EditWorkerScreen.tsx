@@ -1,5 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import { Alert, View, Text, Platform } from 'react-native';
+import {
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  Text,
+  View,
+} from 'react-native';
 import Screen from '../../components/layout/Screen';
 import AppHeader from '../../components/layout/AppHeader';
 import TextField from '../../components/primitives/TextField';
@@ -8,6 +14,7 @@ import { spacing } from '../../theme/tokens';
 import { subscribeWorker, updateWorker, Worker } from '../../services/workers';
 import { CommonActions } from '@react-navigation/native';
 import { useTheme } from '../../theme/ThemeProvider';
+import { showAlert } from '../../utils/alert';
 
 export default function EditWorkerScreen({ route, navigation }: any) {
   const { colors } = useTheme();
@@ -33,7 +40,7 @@ export default function EditWorkerScreen({ route, navigation }: any) {
       setName(w.name ?? '');
       setRole(w.role ?? '');
       const s = Number(w.monthlySalaryAED ?? w.baseSalary ?? 0);
-      setSalary(s ? String(s) : '');
+      setSalary(Number.isFinite(s) ? String(s) : '');
       setStatus((w.status as any) ?? 'active');
       setEmployeeId((w as any).employeeId ?? '');
       const sd = Number((w as any).salaryDueDay ?? 28);
@@ -59,19 +66,19 @@ export default function EditWorkerScreen({ route, navigation }: any) {
   const onSave = async () => {
     if (!effectiveId) return;
     if (!name.trim()) {
-      Alert.alert('Name is required');
+      showAlert('Name is required');
       return;
     }
     if (!role.trim()) {
-      Alert.alert('Role is required');
+      showAlert('Role is required');
       return;
     }
     if (!phone.trim()) {
-      Alert.alert('Phone number is required');
+      showAlert('Phone number is required');
       return;
     }
     if (!Number.isFinite(salaryNum)) {
-      Alert.alert('Monthly salary must be a non-negative number');
+      showAlert('Monthly salary must be a non-negative number');
       return;
     }
 
@@ -87,7 +94,7 @@ export default function EditWorkerScreen({ route, navigation }: any) {
       });
       navigation.dispatch(CommonActions.goBack());
     } catch (e: any) {
-      Alert.alert('Error', e?.message ?? 'Failed to update worker');
+      showAlert('Error', e?.message ?? 'Failed to update worker');
     } finally {
       setBusy(false);
     }
@@ -103,7 +110,7 @@ export default function EditWorkerScreen({ route, navigation }: any) {
       });
       setStatus('former');
     } catch (e: any) {
-      Alert.alert('Error', e?.message ?? 'Failed to update status');
+      showAlert('Error', e?.message ?? 'Failed to update status');
     } finally {
       setBusy(false);
     }
@@ -119,95 +126,103 @@ export default function EditWorkerScreen({ route, navigation }: any) {
       });
       setStatus('active');
     } catch (e: any) {
-      Alert.alert('Error', e?.message ?? 'Failed to update status');
+      showAlert('Error', e?.message ?? 'Failed to update status');
     } finally {
       setBusy(false);
     }
   };
-
-  const isIOS = Platform.OS === 'ios'; // in case you use this in styles later
 
   return (
     <Screen>
       <AppHeader
         title="Edit Worker"
         onBack={() => navigation.goBack()}
+        transparent
+        noBorder
       />
 
-      <View style={{ padding: spacing.lg, gap: spacing.md }}>
-        {!worker && (
-          <Text style={{ color: colors.subtext }}>
-            Loading worker details…
-          </Text>
-        )}
-
-        {worker && (
-          <>
-            <TextField label="Name" value={name} onChangeText={setName} />
-            <TextField label="Role" value={role} onChangeText={setRole} />
-
-            <TextField
-              label="Employee ID"
-              value={employeeId}
-              editable={false}
-            />
-
-            {/* ✅ Phone field */}
-            <TextField
-              label="Phone number"
-              value={phone}
-              onChangeText={setPhone}
-              keyboardType="phone-pad"
-              placeholder="+9715xxxxxxxx"
-            />
-
-            <TextField
-              label="Salary Due Day (1–28)"
-              value={dueDay}
-              onChangeText={(t) =>
-                setDueDay(t.replace(/[^0-9]/g, '').slice(0, 2))
-              }
-              keyboardType="number-pad"
-            />
-
-            <TextField
-              label="Monthly Salary (AED)"
-              value={salary}
-              onChangeText={setSalary}
-              keyboardType="number-pad"
-            />
-
-            <Button
-              label={busy ? 'Saving…' : 'Save'}
-              onPress={onSave}
-              disabled={busy}
-              fullWidth
-            />
-
-            <View style={{ height: spacing.lg }} />
-
-            <Text style={{ color: colors.subtext, marginBottom: spacing.sm }}>
-              Status: {status === 'active' ? 'Active' : 'Former'}
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        style={{ flex: 1 }}
+      >
+        <ScrollView
+          contentContainerStyle={{ padding: spacing.lg, gap: spacing.md }}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          {!worker && (
+            <Text style={{ color: colors.subtext }}>
+              Loading worker details…
             </Text>
+          )}
 
-            {status === 'active' ? (
+          {worker && (
+            <>
+              <TextField label="Name" value={name} onChangeText={setName} />
+              <TextField label="Role" value={role} onChangeText={setRole} />
+
+              <TextField
+                label="Employee ID"
+                value={employeeId}
+                editable={false}
+              />
+
+              <TextField
+                label="Phone number"
+                value={phone}
+                onChangeText={setPhone}
+                keyboardType="phone-pad"
+                placeholder="+9715xxxxxxxx"
+              />
+
+              <TextField
+                label="Salary Due Day (1–28)"
+                value={dueDay}
+                onChangeText={(t) =>
+                  setDueDay(t.replace(/[^0-9]/g, '').slice(0, 2))
+                }
+                keyboardType="number-pad"
+              />
+
+              <TextField
+                label="Monthly Salary (AED)"
+                value={salary}
+                onChangeText={setSalary}
+                keyboardType="number-pad"
+              />
+
               <Button
-                label={busy ? 'Updating…' : 'Mark as Former'}
-                onPress={markFormer}
+                label={busy ? 'Saving…' : 'Save'}
+                onPress={onSave}
                 disabled={busy}
                 fullWidth
               />
-            ) : (
-              <Button
-                label={busy ? 'Updating…' : 'Mark as Active'}
-                onPress={markActive}
-                disabled={busy}
-                fullWidth
-              />
-            )}
-          </>
-        )}
-      </View>
+
+              <View style={{ height: spacing.lg }} />
+
+              <Text style={{ color: colors.subtext, marginBottom: spacing.sm }}>
+                Status: {status === 'active' ? 'Active' : 'Former'}
+              </Text>
+
+              {status === 'active' ? (
+                <Button
+                  label={busy ? 'Updating…' : 'Mark as Former'}
+                  onPress={markFormer}
+                  disabled={busy}
+                  fullWidth
+                />
+              ) : (
+                <Button
+                  label={busy ? 'Updating…' : 'Mark as Active'}
+                  onPress={markActive}
+                  disabled={busy}
+                  fullWidth
+                />
+              )}
+            </>
+          )}
+        </ScrollView>
+      </KeyboardAvoidingView>
     </Screen>
   );
 }

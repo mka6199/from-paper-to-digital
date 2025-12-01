@@ -1,18 +1,17 @@
 // src/screens/workers/WorkerProfileScreen.tsx
 import React from 'react';
 import {
-  Alert,
   Text,
   View,
   StyleSheet,
-  useWindowDimensions,
-  LayoutChangeEvent,
+  ScrollView,
   Platform,
 } from 'react-native';
 import { useFocusEffect, useRoute } from '@react-navigation/native';
 
 import Screen from '../../components/layout/Screen';
 import AppHeader from '../../components/layout/AppHeader';
+import { showAlert } from '../../utils/alert';
 import Button from '../../components/primitives/Button';
 import Card from '../../components/primitives/Card';
 import { spacing, typography } from '../../theme/tokens';
@@ -63,14 +62,11 @@ const initials = (name?: string) =>
     .join('');
 
 const AVATAR = 96;
-// rough estimate for header + bottom tabs height (used for web centering)
-const CHROME_ESTIMATE = 180;
 
 export default function WorkerProfileScreen({ navigation }: any) {
   const route = useRoute<any>();
   const { colors } = useTheme();
   const { format } = useCurrency();
-  const { height: windowHeight } = useWindowDimensions();
 
   const { id, worker: initialWorker } = (route?.params ?? {}) as {
     id: string;
@@ -80,26 +76,31 @@ export default function WorkerProfileScreen({ navigation }: any) {
   const [w, setW] = React.useState<WorkerLike | null>(
     initialWorker ? normalize(initialWorker) : null
   );
+  const [loadError, setLoadError] = React.useState<string | null>(null);
 
-  const [contentHeight, setContentHeight] = React.useState(0);
+  const fetchWorker = React.useCallback(() => {
+    let cancelled = false;
+    setLoadError(null);
+    (async () => {
+      try {
+        const fresh = await getWorker(id);
+        if (!cancelled && fresh) {
+          setW(normalize({ id, ...(fresh as any) }));
+        }
+      } catch (e) {
+        if (!cancelled) setLoadError('Unable to load worker details.');
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [id]);
 
   useFocusEffect(
     React.useCallback(() => {
-      let cancelled = false;
-      (async () => {
-        try {
-          const fresh = await getWorker(id);
-          if (!cancelled && fresh) {
-            setW(normalize({ id, ...(fresh as any) }));
-          }
-        } catch (e) {
-          console.warn('getWorker failed:', e);
-        }
-      })();
-      return () => {
-        cancelled = true;
-      };
-    }, [id])
+      const cleanup = fetchWorker();
+      return cleanup;
+    }, [fetchWorker])
   );
 
   React.useEffect(() => {
@@ -116,13 +117,13 @@ export default function WorkerProfileScreen({ navigation }: any) {
 
   function onPay() {
     if (former) {
-      Alert.alert(
+      showAlert(
         'Former worker',
         'This worker is marked as Former. Reactivate them to record new payments.'
       );
       return;
     }
-    navigation.navigate('PaySalary', { workerId: id, id });
+    navigation.navigate('PaySalary', { workerId: id });
   }
 
   function onHistory() {
@@ -133,43 +134,38 @@ export default function WorkerProfileScreen({ navigation }: any) {
   }
 
   function onEdit() {
-    navigation.navigate('EditWorker', { workerId: id, id });
+    navigation.navigate('EditWorker', { workerId: id });
   }
-
-  const onContentLayout = (e: LayoutChangeEvent) => {
-    setContentHeight(e.nativeEvent.layout.height);
-  };
-
-  // ----- centering logic -----
-  const available = windowHeight - CHROME_ESTIMATE;
-  const autoMargin =
-    contentHeight > 0
-      ? Math.max(spacing.lg, (available - contentHeight) / 2)
-      : spacing.xl;
-
-  // ✅ Keep web exactly as before (nice perfect centering)
-  // ✅ On native (phone), push it further down so it doesn't sit under the header
-  const marginTop =
-    Platform.OS === 'web'
-      ? autoMargin
-      : Math.max(spacing.xl * 3, autoMargin + spacing.lg);
-  // ---------------------------
 
   return (
     <Screen>
-      <AppHeader title="Worker Profile" onBack={() => navigation.goBack()} />
+      <AppHeader title="Worker Profile" onBack={() => navigation.goBack()} transparent noBorder />
 
-      <View
-        style={{
-          flex: 1,
+      <ScrollView
+        contentContainerStyle={{
           paddingHorizontal: spacing.lg,
-          paddingBottom: spacing.xl,
+          paddingTop: spacing['2xl'],
+          paddingBottom: 100,
         }}
+        showsVerticalScrollIndicator={false}
       >
-        <View
-          style={[styles.content, { marginTop }]}
-          onLayout={onContentLayout}
-        >
+        {loadError && !w ? (
+          <Card
+            style={{
+              padding: spacing.lg,
+              borderWidth: 1,
+              borderColor: colors.border,
+              marginBottom: spacing.lg,
+            }}
+          >
+            <Text style={{ color: colors.text, marginBottom: spacing.sm }}>
+              {loadError}
+            </Text>
+            <Button label="Retry" onPress={() => fetchWorker()} fullWidth />
+          </Card>
+        ) : null}
+
+        <View style={styles.content}>
           <Card
             style={[
               styles.card,
@@ -179,7 +175,7 @@ export default function WorkerProfileScreen({ navigation }: any) {
               },
             ]}
           >
-            <View style={{ alignItems: 'center', gap: spacing.md }}>
+            <View style={{ alignItems: 'center', gap: spacing.lg }}>
               <View
                 style={[
                   styles.avatar,
@@ -191,7 +187,7 @@ export default function WorkerProfileScreen({ navigation }: any) {
                 </Text>
               </View>
 
-              <View style={{ alignItems: 'center', gap: 4 }}>
+              <View style={{ alignItems: 'center', gap: spacing.sm }}>
                 <Text
                   style={[
                     typography.h2,
@@ -274,7 +270,7 @@ export default function WorkerProfileScreen({ navigation }: any) {
             />
           </View>
         </View>
-      </View>
+      </ScrollView>
     </Screen>
   );
 }
@@ -286,14 +282,14 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
   },
   card: {
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.lg,
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.xl,
     borderWidth: 1,
     borderRadius: 16,
-    marginBottom: spacing.lg,
+    marginBottom: spacing.xl,
   },
   buttons: {
-    gap: spacing.md,
+    gap: spacing.lg,
   },
   avatar: {
     width: AVATAR,

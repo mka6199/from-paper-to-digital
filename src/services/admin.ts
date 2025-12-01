@@ -1,4 +1,4 @@
-import { db, ensureAuth } from '../../firebase';
+import { db, ensureAuth } from '../config/firebase';
 import {
   collection,
   onSnapshot,

@@ -3,7 +3,7 @@ import { View, Text, ActivityIndicator, Pressable } from 'react-native';
 import { useTheme } from '../../theme/ThemeProvider';
 import { spacing, typography } from '../../theme/tokens';
 import { AuthContext } from '../../context/AuthProvider';
-import { signOut } from '../../../firebase';
+import { signOut } from '../../config/firebase';
 
 
 type Props = {

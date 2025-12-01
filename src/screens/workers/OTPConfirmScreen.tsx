@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Alert, View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
 import Screen from '../../components/layout/Screen';
 import AppHeader from '../../components/layout/AppHeader';
 import TextField from '../../components/primitives/TextField';
@@ -9,6 +9,7 @@ import { addPayment } from '../../services/payments';
 import { spacing, typography } from '../../theme/tokens';
 import { useTheme } from '../../theme/ThemeProvider';
 import { useCurrency } from '../../context/CurrencyProvider';
+import { showAlert } from '../../utils/alert';
 
 type NavParams = {
   workerId: string;
@@ -21,8 +22,10 @@ type NavParams = {
 };
 
 const SEND_OTP_URL =
+  process.env.EXPO_PUBLIC_SEND_OTP_URL ||
   'https://us-central1-from-paper-to-digital.cloudfunctions.net/sendOtp';
 const VERIFY_OTP_URL =
+  process.env.EXPO_PUBLIC_VERIFY_OTP_URL ||
   'https://us-central1-from-paper-to-digital.cloudfunctions.net/verifyOtp';
 
 export default function OTPConfirmScreen({ route, navigation }: any) {
@@ -44,6 +47,8 @@ export default function OTPConfirmScreen({ route, navigation }: any) {
   const [busy, setBusy] = useState(false);
   const [sending, setSending] = useState(false);
   const [cooldown, setCooldown] = useState(0);
+  const [hasSentOtp, setHasSentOtp] = useState(false);
+  const activeRequest = React.useRef<AbortController | null>(null);
 
   const ensureYYYYMM = (d?: string) => {
     if (typeof d === 'string' && /^\d{4}-\d{2}$/.test(d)) return d;
@@ -62,12 +67,24 @@ export default function OTPConfirmScreen({ route, navigation }: any) {
 
   const confirmEnabled = useMemo(() => {
     const nAmt = Number(amount || 0);
-    return !!workerId && nAmt > 0 && String(otp).trim().length >= 4 && !busy;
-  }, [workerId, amount, otp, busy]);
+    return (
+      !!workerId &&
+      nAmt > 0 &&
+      String(otp).trim().length >= 4 &&
+      hasSentOtp &&
+      !busy
+    );
+  }, [workerId, amount, otp, busy, hasSentOtp]);
+
+  useEffect(() => {
+    return () => {
+      activeRequest.current?.abort();
+    };
+  }, []);
 
   async function onSendOtp() {
     if (!phone) {
-      Alert.alert(
+      showAlert(
         'Missing phone number',
         'This worker does not have a phone number saved.'
       );
@@ -78,19 +95,25 @@ export default function OTPConfirmScreen({ route, navigation }: any) {
     setSending(true);
     setOtpError(null); 
     try {
+      activeRequest.current?.abort();
+      const controller = new AbortController();
+      activeRequest.current = controller;
       const res = await fetch(SEND_OTP_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ phone }),
+        signal: controller.signal,
       });
       const data = await res.json().catch(() => null);
       if (!res.ok) {
         throw new Error(data?.error || 'Failed to send OTP');
       }
-      Alert.alert('OTP sent', 'A verification code was sent to the worker.');
+      showAlert('OTP sent', 'A verification code was sent to the worker.');
       setCooldown(60); 
+      setHasSentOtp(true);
     } catch (e: any) {
-      Alert.alert(
+      if (e?.name === 'AbortError') return;
+      showAlert(
         'Failed to send OTP',
         e?.message || 'Please try again in a moment.'
       );
@@ -105,27 +128,35 @@ export default function OTPConfirmScreen({ route, navigation }: any) {
       setOtpError('Please enter the 4–6 digit code.');
       return;
     }
+    if (!hasSentOtp) {
+      showAlert('Send OTP first', 'Please send a code before confirming.');
+      return;
+    }
     if (!workerId) {
-      Alert.alert('Missing worker id');
+      showAlert('Missing worker id');
       return;
     }
     const nAmt = Number(amount || 0);
     if (!Number.isFinite(nAmt) || nAmt <= 0) {
-      Alert.alert('Enter a valid amount');
+      showAlert('Enter a valid amount');
       return;
     }
     if (!phone) {
-      Alert.alert('Missing phone number');
+      showAlert('Missing phone number');
       return;
     }
 
     setBusy(true);
     setOtpError(null);
     try {
+      activeRequest.current?.abort();
+      const controller = new AbortController();
+      activeRequest.current = controller;
       const res = await fetch(VERIFY_OTP_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ phone, code }),
+        signal: controller.signal,
       });
       const data = await res.json().catch(() => null);
 
@@ -154,7 +185,8 @@ export default function OTPConfirmScreen({ route, navigation }: any) {
         method: method || 'bank',
       });
     } catch (e: any) {
-      Alert.alert('Payment failed', e?.message ?? 'Please try again.');
+      if (e?.name === 'AbortError') return;
+      showAlert('Payment failed', e?.message ?? 'Please try again.');
     } finally {
       setBusy(false);
     }
@@ -171,7 +203,7 @@ export default function OTPConfirmScreen({ route, navigation }: any) {
 
   return (
     <Screen>
-      <AppHeader title="Confirm Payment" onBack={() => navigation.goBack()} />
+      <AppHeader title="Confirm Payment" onBack={() => navigation.goBack()} transparent noBorder />
 
       <View style={{ padding: spacing.lg, gap: spacing.lg }}>
         <Card style={[styles.card, { borderColor: colors.border }]}>

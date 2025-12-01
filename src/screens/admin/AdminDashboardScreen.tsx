@@ -6,7 +6,7 @@ import Card from '../../components/primitives/Card';
 import Button from '../../components/primitives/Button';
 import { spacing, typography } from '../../theme/tokens';
 import { subscribeAllUsers, subscribeAllWorkers, subscribeAllPayments } from '../../services/admin';
-import { signOut } from '../../../firebase';
+import { signOut } from '../../config/firebase';
 import AdminGate from '../../components/admin/AdminGate';
 import { useTheme } from '../../theme/ThemeProvider';
 
@@ -36,7 +36,7 @@ export default function AdminDashboardScreen({ navigation }: any) {
   return (
     <AdminGate title="Admin Panel">
       <Screen>
-        <AppHeader title="Admin Panel" />
+        <AppHeader title="Admin Panel" transparent noBorder />
         <View style={{ paddingHorizontal: spacing.lg, gap: spacing.md, paddingBottom: spacing['2xl'] }}>
           <View style={{ alignItems: 'flex-end', marginBottom: spacing.sm }}>
             <Button label="Log out" variant="outline" tone="danger" onPress={onLogout} />

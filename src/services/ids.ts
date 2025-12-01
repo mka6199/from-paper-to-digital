@@ -1,4 +1,4 @@
-import { db, auth } from '../../firebase';
+import { db, auth } from '../config/firebase';
 import { doc, runTransaction, serverTimestamp } from 'firebase/firestore';
 
 export async function getNextWorkerNumber(): Promise<number> {

@@ -1,4 +1,4 @@
-import { db, auth, ensureAuth } from '../../firebase';
+import { db, auth, ensureAuth } from '../config/firebase';
 import {
   addDoc,
   collection,

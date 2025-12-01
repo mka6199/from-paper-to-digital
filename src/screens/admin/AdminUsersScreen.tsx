@@ -1,11 +1,12 @@
 import React from 'react';
-import { View, Text, FlatList, Alert, StyleSheet, Switch } from 'react-native';
+import { View, Text, FlatList, StyleSheet, Switch } from 'react-native';
 import Screen from '../../components/layout/Screen';
 import AppHeader from '../../components/layout/AppHeader';
 import Card from '../../components/primitives/Card';
 import Button from '../../components/primitives/Button';
 import TextField from '../../components/primitives/TextField';
 import { spacing, typography } from '../../theme/tokens';
+import { showAlert } from '../../utils/alert';
 import {
   subscribeAllUsers,
   setUserRole,
@@ -14,7 +15,7 @@ import {
   AdminUser,
   adminDeleteUserAndData,
 } from '../../services/admin';
-import { signOut } from '../../../firebase';
+import { signOut } from '../../config/firebase';
 import AdminGate from '../../components/admin/AdminGate';
 import { AuthContext } from '../../context/AuthProvider';
 import { useTheme } from '../../theme/ThemeProvider';
@@ -53,19 +54,19 @@ export default function AdminUsersScreen({ navigation }: any) {
   async function saveEdit() {
     if (!editUid) return;
     if (!firstName.trim() || !lastName.trim()) {
-      Alert.alert('Invalid name', 'First and last name are required.');
+      showAlert('Invalid name', 'First and last name are required.');
       return;
     }
     if (!isPhone(phone)) {
-      Alert.alert('Invalid phone', 'Enter a valid phone number.');
+      showAlert('Invalid phone', 'Enter a valid phone number.');
       return;
     }
     if (dobYMD && !isYMD(dobYMD)) {
-      Alert.alert('Invalid DOB', 'Enter DOB as YYYY-MM-DD or leave blank.');
+      showAlert('Invalid DOB', 'Enter DOB as YYYY-MM-DD or leave blank.');
       return;
     }
     if (!isEmail(email)) {
-      Alert.alert('Invalid email', 'Enter a valid email address.');
+      showAlert('Invalid email', 'Enter a valid email address.');
       return;
     }
     try {
@@ -78,17 +79,17 @@ export default function AdminUsersScreen({ navigation }: any) {
       });
       setEditUid(null);
     } catch (e: any) {
-      Alert.alert('Failed to update', e?.message ?? 'Please try again.');
+      showAlert('Failed to update', e?.message ?? 'Please try again.');
     }
   }
 
   function onToggleRole(u: AdminUser) {
     if (u.uid === user?.uid) {
-      Alert.alert('Not allowed', 'You cannot change your own role.');
+      showAlert('Not allowed', 'You cannot change your own role.');
       return;
     }
     const next = u.role === 'admin' ? 'user' : 'admin';
-    Alert.alert('Change role', `Set ${u.email || u.uid} to ${next}?`, [
+    showAlert('Change role', `Set ${u.email || u.uid} to ${next}?`, [
       { text: 'Cancel', style: 'cancel' },
       { text: 'Change', style: 'destructive', onPress: () => setUserRole(u.uid, next) },
     ]);
@@ -96,20 +97,20 @@ export default function AdminUsersScreen({ navigation }: any) {
 
   function onToggleActive(u: AdminUser, value: boolean) {
     if (u.uid === user?.uid) {
-      Alert.alert('Not allowed', 'You cannot deactivate yourself.');
+      showAlert('Not allowed', 'You cannot deactivate yourself.');
       return;
     }
     setUserActive(u.uid, value).catch((e) =>
-      Alert.alert('Error', e?.message ?? 'Failed to update active flag')
+      showAlert('Error', e?.message ?? 'Failed to update active flag')
     );
   }
 
   function onRemoveUser(u: AdminUser) {
     if (u.uid === user?.uid) {
-      Alert.alert('Not allowed', 'You cannot remove your own admin account.');
+      showAlert('Not allowed', 'You cannot remove your own admin account.');
       return;
     }
-    Alert.alert(
+    showAlert(
       'Remove user & data',
       `This will permanently delete:\n\n• the profile for ${u.email || u.uid}\n• ALL of their workers\n• ALL of their payments\n\nThis cannot be undone.`,
       [
@@ -125,7 +126,7 @@ export default function AdminUsersScreen({ navigation }: any) {
                 deletePayments: true,
               });
             } catch (e: any) {
-              Alert.alert('Delete failed', e?.message ?? 'Could not remove user.');
+              showAlert('Delete failed', e?.message ?? 'Could not remove user.');
             }
           },
         },
@@ -137,7 +138,7 @@ export default function AdminUsersScreen({ navigation }: any) {
 
   const header = (
     <View style={{ paddingHorizontal: spacing.lg }}>
-      <AppHeader title="Manage Users" onBack={() => navigation.goBack()} />
+      <AppHeader title="Manage Users" onBack={() => navigation.goBack()} transparent noBorder />
       <View style={{ alignItems: 'flex-end', marginBottom: spacing.md }}>
         <Button label="Log out" variant="outline" tone="danger" onPress={onLogout} />
       </View>
@@ -215,7 +216,7 @@ export default function AdminUsersScreen({ navigation }: any) {
           data={rows}
           keyExtractor={(i) => i.uid}
           renderItem={renderItem}
-          contentContainerStyle={{ padding: spacing.lg, gap: spacing.md, paddingBottom: spacing['2xl'] }}
+          contentContainerStyle={{ padding: spacing.lg, gap: spacing.md, paddingBottom: 120 }}
           showsVerticalScrollIndicator={false}
           ListEmptyComponent={
             <Text style={[typography.small, { textAlign: 'center', color: colors.subtext }]}>
@@ -238,3 +239,4 @@ const styles = StyleSheet.create({
     gap: spacing.md,
   },
 });
+

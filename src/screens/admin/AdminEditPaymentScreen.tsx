@@ -1,13 +1,14 @@
 import React from 'react';
-import { View, Alert } from 'react-native';
+import { View } from 'react-native';
 import Screen from '../../components/layout/Screen';
 import AppHeader from '../../components/layout/AppHeader';
 import Card from '../../components/primitives/Card';
 import TextField from '../../components/primitives/TextField';
 import Button from '../../components/primitives/Button';
 import { spacing } from '../../theme/tokens';
-import { db } from '../../../firebase';
+import { db } from '../../config/firebase';
 import { doc, getDoc, Timestamp } from 'firebase/firestore';
+import { showAlert } from '../../utils/alert';
 import { adminUpdatePayment } from '../../services/admin';
 import { deletePayment } from '../../services/payments';
 import AdminGate from '../../components/admin/AdminGate';
@@ -70,7 +71,7 @@ export default function AdminEditPaymentScreen({ route, navigation }: any) {
 
   async function onSave() {
     if (!valid) {
-      Alert.alert('Invalid fields', 'Please fix invalid values before saving.');
+      showAlert('Invalid fields', 'Please fix invalid values before saving.');
       return;
     }
     try {
@@ -88,12 +89,12 @@ export default function AdminEditPaymentScreen({ route, navigation }: any) {
       await adminUpdatePayment(paymentId, patch);
       navigation.goBack();
     } catch (e: any) {
-      Alert.alert('Failed to save', e?.message ?? 'Please try again.');
+      showAlert('Failed to save', e?.message ?? 'Please try again.');
     }
   }
 
   function onDeleteConfirm() {
-    Alert.alert(
+    showAlert(
       'Delete payment',
       'This action cannot be undone. Are you sure you want to permanently remove this payment?',
       [
@@ -107,7 +108,7 @@ export default function AdminEditPaymentScreen({ route, navigation }: any) {
               await deletePayment(paymentId);
               navigation.goBack();
             } catch (e: any) {
-              Alert.alert('Delete failed', e?.message ?? 'Could not delete payment.');
+              showAlert('Delete failed', e?.message ?? 'Could not delete payment.');
             } finally {
               setDeleting(false);
             }
@@ -120,7 +121,7 @@ export default function AdminEditPaymentScreen({ route, navigation }: any) {
   return (
     <AdminGate title="Admin Panel">
       <Screen scroll padded>
-        <AppHeader title="Admin • Edit Payment" onBack={() => navigation.goBack()} />
+        <AppHeader title="Admin • Edit Payment" onBack={() => navigation.goBack()} transparent noBorder />
         <Card style={{ borderColor: colors.border, backgroundColor: colors.surface }}>
           <View style={{ gap: spacing.md }}>
             <TextField label="Amount (AED)" value={amount} onChangeText={setAmount} keyboardType="numeric" />
@@ -159,3 +160,4 @@ export default function AdminEditPaymentScreen({ route, navigation }: any) {
     </AdminGate>
   );
 }
+
