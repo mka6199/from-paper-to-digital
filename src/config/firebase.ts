@@ -11,6 +11,9 @@ import {
   createUserWithEmailAndPassword,
   signOut as fbSignOut,
   sendPasswordResetEmail,
+  GoogleAuthProvider,
+  signInWithCredential,
+  signInWithPopup,
   User,
 } from 'firebase/auth';
 
@@ -75,4 +78,16 @@ export async function sendResetPasswordEmail(toEmail?: string) {
   const email = (toEmail ?? auth.currentUser?.email ?? "").trim();
   if (!email) throw new Error("No email available for password reset.");
   await sendPasswordResetEmail(auth, email);
+}
+
+// Google Sign-In
+export const googleProvider = new GoogleAuthProvider();
+
+export async function signInWithGoogle(idToken: string) {
+  const credential = GoogleAuthProvider.credential(idToken);
+  return signInWithCredential(auth, credential);
+}
+
+export async function signInWithGooglePopup() {
+  return signInWithPopup(auth, googleProvider);
 }

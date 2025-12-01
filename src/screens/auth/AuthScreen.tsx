@@ -11,6 +11,7 @@ import { useTheme } from '../../theme/ThemeProvider';
 import { auth, db } from '../../config/firebase';
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword } from 'firebase/auth';
 import { doc, serverTimestamp, setDoc } from 'firebase/firestore';
+import { useGoogleAuth } from '../../hooks/useGoogleAuth';
 
 export default function AuthScreen() {
   const { colors } = useTheme();
@@ -18,7 +19,12 @@ export default function AuthScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
+  const [phone, setPhone] = useState('');
   const [busy, setBusy] = useState(false);
+
+  const { signIn: signInWithGoogle, loading: googleLoading } = useGoogleAuth();
 
   async function onSubmit() {
     if (!email || !password) {
@@ -26,6 +32,9 @@ export default function AuthScreen() {
     }
 
     if (mode === 'create') {
+      if (!firstName || !lastName) {
+        return showAlert('Missing info', 'Please enter your first and last name.');
+      }
       if (password.length < 6) {
         return showAlert('Weak Password', 'Password must be at least 6 characters.');
       }
@@ -44,10 +53,15 @@ export default function AuthScreen() {
           doc(db, 'users', cred.user.uid),
           { 
             uid: cred.user.uid, 
-            email: cred.user.email, 
+            email: cred.user.email,
+            firstName: firstName.trim(),
+            lastName: lastName.trim(),
+            phone: phone.trim() || null,
             role: 'user',
-            isAdmin: false, 
-            createdAt: serverTimestamp() 
+            isAdmin: false,
+            isActive: true,
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
           },
           { merge: true }
         );
@@ -91,6 +105,38 @@ export default function AuthScreen() {
             {/* Form */}
             <Card style={{ marginTop: spacing.xl }}>
               <View style={{ gap: spacing.md }}>
+                {mode === 'create' && (
+                  <>
+                    <View style={{ flexDirection: 'row', gap: spacing.sm }}>
+                      <View style={{ flex: 1 }}>
+                        <TextField
+                          label="First Name"
+                          value={firstName}
+                          onChangeText={setFirstName}
+                          placeholder="John"
+                          autoComplete="given-name"
+                        />
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <TextField
+                          label="Last Name"
+                          value={lastName}
+                          onChangeText={setLastName}
+                          placeholder="Doe"
+                          autoComplete="family-name"
+                        />
+                      </View>
+                    </View>
+                    <TextField
+                      label="Phone (Optional)"
+                      value={phone}
+                      onChangeText={setPhone}
+                      placeholder="+971 50 123 4567"
+                      keyboardType="phone-pad"
+                      autoComplete="tel"
+                    />
+                  </>
+                )}
                 <TextField
                   label="Email"
                   value={email}
@@ -128,17 +174,45 @@ export default function AuthScreen() {
                 label={mode === 'login' ? 'Sign In' : 'Create Account'}
                 onPress={onSubmit}
                 loading={busy}
-                disabled={busy}
+                disabled={busy || googleLoading}
                 fullWidth
                 tone="brand"
               />
+
+              {/* Divider */}
+              <View style={styles.divider}>
+                <View style={[styles.dividerLine, { backgroundColor: colors.border }]} />
+                <Text style={[typography.small, { color: colors.subtext, paddingHorizontal: spacing.sm }]}>
+                  OR
+                </Text>
+                <View style={[styles.dividerLine, { backgroundColor: colors.border }]} />
+              </View>
+
+              {/* Google Sign-In Button */}
+              <Pressable
+                onPress={signInWithGoogle}
+                disabled={busy || googleLoading}
+                style={[
+                  styles.googleButton,
+                  { 
+                    backgroundColor: colors.background,
+                    borderColor: colors.border,
+                    opacity: (busy || googleLoading) ? 0.5 : 1,
+                  }
+                ]}
+              >
+                <Ionicons name="logo-google" size={20} color="#DB4437" />
+                <Text style={[typography.body, { color: colors.text, marginLeft: spacing.sm }]}>
+                  Continue with Google
+                </Text>
+              </Pressable>
               
               {/* Switch Mode */}
               <View style={styles.switchModeContainer}>
                 <Text style={[typography.small, { color: colors.subtext }]}>
                   {mode === 'login' ? "Don't have an account?" : 'Already have an account?'}
                 </Text>
-                <Pressable onPress={() => setMode((m) => (m === 'login' ? 'create' : 'login'))} disabled={busy}>
+                <Pressable onPress={() => setMode((m) => (m === 'login' ? 'create' : 'login'))} disabled={busy || googleLoading}>
                   <Text style={[typography.small, { color: colors.brand, fontWeight: '700', marginLeft: 4 }]}>
                     {mode === 'login' ? 'Sign Up' : 'Sign In'}
                   </Text>
@@ -175,6 +249,23 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     alignSelf: 'center',
+  },
+  divider: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: spacing.sm,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+  },
+  googleButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: spacing.md,
+    borderRadius: 8,
+    borderWidth: 1,
   },
   switchModeContainer: {
     flexDirection: 'row',

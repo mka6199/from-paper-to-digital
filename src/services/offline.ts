@@ -6,6 +6,7 @@ import { Payment } from './payments';
 const CACHE_PREFIX = 'offline_cache_';
 const PENDING_PREFIX = 'offline_pending_';
 const LAST_SYNC_KEY = 'offline_last_sync';
+const FORCE_OFFLINE_KEY = 'offline_force_offline_mode';
 
 export type PendingOperation = {
   id: string;
@@ -15,8 +16,33 @@ export type PendingOperation = {
   synced: boolean;
 };
 
+// Force offline mode for testing (overrides network detection)
+let forceOfflineMode = false;
+
+export async function setForceOfflineMode(enabled: boolean): Promise<void> {
+  forceOfflineMode = enabled;
+  await AsyncStorage.setItem(FORCE_OFFLINE_KEY, JSON.stringify(enabled));
+}
+
+export async function getForceOfflineMode(): Promise<boolean> {
+  try {
+    const stored = await AsyncStorage.getItem(FORCE_OFFLINE_KEY);
+    if (stored) {
+      forceOfflineMode = JSON.parse(stored);
+    }
+  } catch (error) {
+    console.error('Error getting force offline mode:', error);
+  }
+  return forceOfflineMode;
+}
+
 // Check if device is online
 export async function isOnline(): Promise<boolean> {
+  // Check if force offline mode is enabled (for demo/testing)
+  if (forceOfflineMode) {
+    return false;
+  }
+  
   const state = await NetInfo.fetch();
   return state.isConnected ?? false;
 }

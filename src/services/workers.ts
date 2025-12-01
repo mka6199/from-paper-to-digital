@@ -15,6 +15,12 @@ import {
   orderBy,
 } from 'firebase/firestore';
 import { getNextWorkerNumber, formatEmployeeId } from './ids';
+import { 
+  isOnline, 
+  cacheWorkers, 
+  getCachedWorkers,
+  addPendingOperation 
+} from './offline';
 
 export type Worker = {
   nextDueAtMs?: number;
@@ -120,9 +126,26 @@ export function subscribeMyWorkers(
   if (!uid) throw new Error('Not signed in');
 
   const status = opts?.status ?? 'active';
+  
+  // If offline, serve cached data immediately
+  const checkOffline = async () => {
+    const online = await isOnline();
+    if (!online) {
+      const cached = await getCachedWorkers();
+      let list = cached;
+      if (status !== 'all') list = list.filter((w) => (w.status ?? 'active') === status);
+      list.sort((a, b) => tsSeconds(b.createdAt) - tsSeconds(a.createdAt));
+      cb(list);
+    }
+  };
+  checkOffline();
+
   const qy = query(COL, where('ownerUid', '==', uid));
   const unsub = onSnapshot(qy, async (snap) => {
     let list = snap.docs.map((d) => toWorker(d.id, d.data()));
+
+    // Cache the fetched workers
+    await cacheWorkers(list);
 
     const now = Timestamp.now();
     list.forEach(async (w) => {
@@ -180,7 +203,7 @@ export async function addWorker(
   const firstDue = new Date(now.getFullYear(), now.getMonth(), dueDay);
   if (firstDue < now) firstDue.setMonth(firstDue.getMonth() + 1);
 
-  const ref = await addDoc(COL, {
+  const workerData = {
     ...w,
     employeeId: (w as any).employeeId ?? eid,
     ownerUid: uid,
@@ -189,20 +212,48 @@ export async function addWorker(
     nextDueAt: Timestamp.fromDate(firstDue),
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
-  });
+  };
+
+  // Check if offline
+  const online = await isOnline();
+  if (!online) {
+    const tempId = `temp_${Date.now()}`;
+    await addPendingOperation({ type: 'add_worker', data: { ...workerData, id: tempId } });
+    return tempId;
+  }
+
+  const ref = await addDoc(COL, workerData);
   return ref.id;
 }
 
 export async function updateWorker(id: string, patch: Partial<Worker>) {
   await ensureAuth();
-  await updateDoc(doc(db, 'workers', id), {
+  
+  const updateData = {
     ...patch,
     updatedAt: serverTimestamp(),
-  });
+  };
+
+  // Check if offline
+  const online = await isOnline();
+  if (!online) {
+    await addPendingOperation({ type: 'update_worker', data: { id, ...updateData } });
+    return;
+  }
+
+  await updateDoc(doc(db, 'workers', id), updateData);
 }
 
 export async function deleteWorker(id: string) {
   await ensureAuth();
+
+  // Check if offline
+  const online = await isOnline();
+  if (!online) {
+    await addPendingOperation({ type: 'delete_worker', data: { id } });
+    return;
+  }
+
   await deleteDoc(doc(db, 'workers', id));
 }
 

@@ -15,6 +15,12 @@ import {
   where,
 } from 'firebase/firestore';
 import { Worker, getWorker, getWorkerCycleWindow, advanceWorkerDue } from './workers';
+import { 
+  isOnline, 
+  cachePayments, 
+  getCachedPayments,
+  addPendingOperation 
+} from './offline';
 
 export const monthKey = (d: Date = new Date()) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
@@ -62,14 +68,25 @@ export async function addPaymentRaw(
 ) {
   await ensureAuth();
   const uid = auth.currentUser!.uid;
-  const ref = await addDoc(COL, {
+  
+  const paymentData = {
     ...p,
     ownerUid: uid,
     month: p.month ?? monthKey(new Date()),
     paidAt: serverTimestamp(),
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
-  });
+  };
+
+  // Check if offline
+  const online = await isOnline();
+  if (!online) {
+    const tempId = `temp_${Date.now()}`;
+    await addPendingOperation({ type: 'add_payment', data: { ...paymentData, id: tempId } });
+    return tempId;
+  }
+
+  const ref = await addDoc(COL, paymentData);
   return ref.id;
 }
 
@@ -132,14 +149,32 @@ export async function recordPaymentAndAdvanceDue(params: {
 
 export async function updatePayment(id: string, patch: Partial<Payment>) {
   await ensureAuth();
-  await updateDoc(doc(db, 'payments', id), {
+  
+  const updateData = {
     ...patch,
     updatedAt: serverTimestamp(),
-  });
+  };
+
+  // Check if offline
+  const online = await isOnline();
+  if (!online) {
+    await addPendingOperation({ type: 'update_payment', data: { id, ...updateData } });
+    return;
+  }
+
+  await updateDoc(doc(db, 'payments', id), updateData);
 }
 
 export async function deletePayment(id: string) {
   await ensureAuth();
+
+  // Check if offline
+  const online = await isOnline();
+  if (!online) {
+    await addPendingOperation({ type: 'delete_payment', data: { id } });
+    return;
+  }
+
   await deleteDoc(doc(db, 'payments', id));
 }
 
@@ -274,6 +309,22 @@ export function subscribeMyPaymentsInRange(
   const startTs = Timestamp.fromDate(start);
   const endTs = Timestamp.fromDate(end);
 
+  // If offline, serve cached data immediately
+  const checkOffline = async () => {
+    const online = await isOnline();
+    if (!online) {
+      const cached = await getCachedPayments();
+      // Filter cached payments by date range
+      const filtered = cached.filter((p) => {
+        const paidAt = p.paidAt as any;
+        const ms = paidAt?.toMillis?.() ?? paidAt?.seconds * 1000 ?? 0;
+        return ms >= startTs.toMillis() && ms <= endTs.toMillis();
+      });
+      cb(filtered);
+    }
+  };
+  checkOffline();
+
   try {
     const qy = query(
       COL,
@@ -285,8 +336,12 @@ export function subscribeMyPaymentsInRange(
 
     return onSnapshot(
       qy,
-      (snap) => {
+      async (snap) => {
         const list = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) })) as Payment[];
+        
+        // Cache the fetched payments
+        await cachePayments(list);
+        
         cb(list);
       },
       (err) => {

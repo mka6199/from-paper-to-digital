@@ -27,6 +27,8 @@ import { upsertMyProfile } from '../../services/profile';
 import { subscribeMyPaymentsInRange, monthRange } from '../../services/payments';
 import * as FileSystem from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
+import { logger } from '../../utils/logger';
+import { getForceOfflineMode, setForceOfflineMode } from '../../services/offline';
 
 export default function SettingsScreen({ navigation }: any) {
   const { profile } = React.useContext(AuthContext);
@@ -35,6 +37,7 @@ export default function SettingsScreen({ navigation }: any) {
 
   const [darkMode, setDarkMode] = React.useState(mode === 'dark');
   const [notificationsEnabled, setNotificationsEnabled] = React.useState(true);
+  const [forceOffline, setForceOffline] = React.useState(false);
 
   const [salaryText, setSalaryText] = React.useState(
     profile?.salaryMonthlyAED != null ? String(profile.salaryMonthlyAED) : ''
@@ -45,9 +48,10 @@ export default function SettingsScreen({ navigation }: any) {
   React.useEffect(() => {
     (async () => {
       try {
-        const [dm, ntf] = await Promise.all([
+        const [dm, ntf, offline] = await Promise.all([
           AsyncStorage.getItem('settings.darkMode'),
           AsyncStorage.getItem('settings.notifications'),
+          getForceOfflineMode(),
         ]);
         if (dm !== null) {
           const on = dm === '1';
@@ -55,6 +59,7 @@ export default function SettingsScreen({ navigation }: any) {
           setMode(on ? 'dark' : 'light');
         }
         if (ntf !== null) setNotificationsEnabled(ntf === '1');
+        setForceOffline(offline);
       } catch {}
     })();
   }, [setMode]);
@@ -95,6 +100,17 @@ export default function SettingsScreen({ navigation }: any) {
   const onToggleNotifications = (v: boolean) => {
     setNotificationsEnabled(v);
     persist('settings.notifications', v ? '1' : '0');
+  };
+
+  const onToggleForceOffline = async (v: boolean) => {
+    setForceOffline(v);
+    await setForceOfflineMode(v);
+    showAlert(
+      'Offline Mode ' + (v ? 'Enabled' : 'Disabled'),
+      v 
+        ? 'App will now behave as if offline. All operations will be queued.' 
+        : 'App will use normal network detection.'
+    );
   };
 
   const pickCurrency = () => {
@@ -177,15 +193,27 @@ export default function SettingsScreen({ navigation }: any) {
         return `${y}-${m}-${day}`;
       };
 
-      // Get this month's payments
-      const payments = await new Promise<any[]>((resolve) => {
+      // Get this month's payments with proper async handling
+      const payments = await new Promise<any[]>((resolve, reject) => {
+        let resolved = false;
+        const timeout = setTimeout(() => {
+          if (!resolved) {
+            resolved = true;
+            reject(new Error('Timeout loading payments'));
+          }
+        }, 10000); // 10 second timeout
+
         const unsub = subscribeMyPaymentsInRange({ start, end }, (list) => {
-          unsub();
-          resolve(list);
+          if (!resolved) {
+            resolved = true;
+            clearTimeout(timeout);
+            unsub();
+            resolve(list);
+          }
         });
       });
 
-      if (payments.length === 0) {
+      if (!payments || payments.length === 0) {
         showAlert('No Data', 'No payments found for this month.');
         return;
       }
@@ -193,13 +221,15 @@ export default function SettingsScreen({ navigation }: any) {
       const header = 'Date,Worker,Amount,Bonus,Method,Note\n';
       const rows = payments
         .map((p) => {
-          const d = p.paidAt?.toDate ? p.paidAt.toDate() : null;
+          // Handle Firestore Timestamp properly
+          const d = p.paidAt?.toDate ? p.paidAt.toDate() : (p.paidAt instanceof Date ? p.paidAt : null);
           const dateStr = d ? ymd(d) : '—';
           const amt = Number(p.amount || 0);
           const bonus = Number(p.bonus || 0);
-          const method = p.method || '';
-          const note = (p.note || '').replace(/"/g, '""');
-          return `${dateStr},"${p.workerName || p.workerId}",${amt},${bonus},${method},"${note}"`;
+          const method = p.method || '—';
+          const workerName = p.workerName || p.workerId || 'Unknown';
+          const note = (p.note || '').replace(/"/g, '""').replace(/\n/g, ' ');
+          return `${dateStr},"${workerName}",${amt},${bonus},"${method}","${note}"`;
         })
         .join('\n');
 
@@ -218,28 +248,69 @@ export default function SettingsScreen({ navigation }: any) {
         link.click();
         document.body.removeChild(link);
         URL.revokeObjectURL(url);
-        showAlert('CSV file downloaded successfully!');
+        showAlert('Success', 'CSV file downloaded successfully!');
       } else {
-        // Mobile: Use FileSystem and Sharing
-        const FS: any = FileSystem;
-        const baseDir: string =
-          FS.documentDirectory ?? FS.cacheDirectory ?? FS.temporaryDirectory ?? '';
-        if (!baseDir) {
-          showAlert('Export Error', 'No writable directory available.');
-          return;
-        }
-        const filePath = baseDir + fileName;
+        // Mobile: Use React Native Share API
+        try {
+          const { Share } = require('react-native');
+          
+          // Try native Share API first (most reliable)
+          try {
+            await Share.share({
+              message: csv,
+              title: 'Payment History Export',
+            });
+            logger.log('Shared via React Native Share');
+            return;
+          } catch (shareError: any) {
+            logger.log('React Native Share failed, trying FileSystem:', shareError.message);
+          }
 
-        await FileSystem.writeAsStringAsync(filePath, csv);
+          // Fallback to FileSystem if Share fails
+          try {
+            const baseDir = FileSystem.documentDirectory || FileSystem.cacheDirectory;
+            
+            if (!baseDir) {
+              throw new Error('No writable directory available');
+            }
 
-        if (await Sharing.isAvailableAsync()) {
-          await Sharing.shareAsync(filePath, { mimeType: 'text/csv' });
-        } else {
-          showAlert('Export Successful', `Saved to ${filePath}`);
+            const filePath = baseDir + fileName;
+            
+            logger.log('Writing CSV to:', filePath);
+            
+            await FileSystem.writeAsStringAsync(filePath, csv, {
+              encoding: FileSystem.EncodingType.UTF8,
+            });
+            
+            logger.log('File written successfully');
+
+            const canShare = await Sharing.isAvailableAsync();
+            
+            if (canShare) {
+              logger.log('Sharing file...');
+              await Sharing.shareAsync(filePath, {
+                mimeType: 'text/csv',
+                dialogTitle: 'Export Payment History',
+                UTI: 'public.comma-separated-values-text',
+              });
+            } else {
+              showAlert('Export Successful', `File saved to:\n${filePath}`);
+            }
+          } catch (fileError: any) {
+            logger.error('FileSystem error:', fileError);
+            // Last resort: copy to clipboard
+            const { Clipboard } = require('react-native');
+            await Clipboard.setString(csv);
+            showAlert('Export', 'CSV data copied to clipboard. You can paste it into a spreadsheet app.');
+          }
+        } catch (e: any) {
+          logger.error('All export methods failed:', e);
+          throw new Error(`Export failed: ${e.message || 'All methods unavailable'}`);
         }
       }
-    } catch (e) {
-      showAlert('Export Failed', String(e));
+    } catch (e: any) {
+      logger.error('CSV export failed:', e);
+      showAlert('Export Failed', e?.message || String(e));
     }
   }
 
@@ -335,6 +406,21 @@ export default function SettingsScreen({ navigation }: any) {
                 <Switch
                   value={notificationsEnabled}
                   onValueChange={onToggleNotifications}
+                  trackColor={{ false: colors.border, true: colors.brand }}
+                  thumbColor="#fff"
+                />
+              </View>
+
+              <View style={styles.item}>
+                <View style={styles.itemLeft}>
+                  <Ionicons name="airplane-outline" size={22} color={colors.brand} />
+                  <Text style={[styles.itemText, { color: colors.text }]}>
+                    Force Offline Mode (Demo)
+                  </Text>
+                </View>
+                <Switch
+                  value={forceOffline}
+                  onValueChange={onToggleForceOffline}
                   trackColor={{ false: colors.border, true: colors.brand }}
                   thumbColor="#fff"
                 />
