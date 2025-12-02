@@ -28,6 +28,9 @@ import { logger } from '../../utils/logger';
 import { getForceOfflineMode, setForceOfflineMode } from '../../services/offline';
 import { getContentBottomPadding } from '../../utils/layout';
 import { NotificationPreferencesContext } from '../../context/NotificationPreferencesProvider';
+import { addWorker, Worker } from '../../services/workers';
+import { Timestamp, serverTimestamp, setDoc, doc } from 'firebase/firestore';
+import { db } from '../../config/firebase';
 
 export default function SettingsScreen({ navigation }: any) {
   const { profile } = React.useContext(AuthContext);
@@ -44,6 +47,7 @@ export default function SettingsScreen({ navigation }: any) {
   );
   const [savingSalary, setSavingSalary] = React.useState(false);
   const [resetBusy, setResetBusy] = React.useState(false);
+  const [creatingDemo, setCreatingDemo] = React.useState(false);
 
   const notificationsEnabled = !notificationPrefs.muted;
 
@@ -205,6 +209,71 @@ export default function SettingsScreen({ navigation }: any) {
     }
   }
 
+  async function createDemoOverdueWorker() {
+    setCreatingDemo(true);
+    try {
+      const uid = auth.currentUser?.uid;
+      if (!uid) {
+        showAlert('Error', 'You must be signed in.');
+        return;
+      }
+
+      // Create a worker with salary due 5 days ago
+      const daysAgo = 5;
+      const dueDate = new Date();
+      dueDate.setDate(dueDate.getDate() - daysAgo);
+      
+      const workerName = `Demo Worker (Overdue ${daysAgo}d)`;
+      
+      // First create the worker with basic data
+      const workerId = await addWorker({
+        name: workerName,
+        role: 'Demo Employee',
+        monthlySalaryAED: 3000,
+        salaryDueDay: dueDate.getDate(),
+      } as any);
+      
+      // Then update it to set the overdue date (bypassing the auto-calculation)
+      await setDoc(doc(db, 'workers', workerId), {
+        nextDueAt: Timestamp.fromDate(dueDate),
+      }, { merge: true });
+      
+      // Force-create the notification directly (bypasses mute preferences for demo)
+      const now = new Date();
+      const dueKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+      const notifId = `due_${uid}_${workerId}_${dueKey}`;
+      
+      const notificationData = {
+        ownerUid: uid,
+        type: 'due',
+        category: 'salary_due',
+        title: 'Payment due',
+        body: `Salary is due for ${workerName}.`,
+        workerId: String(workerId),
+        workerName: String(workerName),
+        metadata: {
+          workerId: String(workerId),
+          workerName: String(workerName),
+        },
+        isRead: false,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      };
+      
+      console.log('Creating notification:', notifId, notificationData);
+      await setDoc(doc(db, 'notifications', notifId), notificationData);
+      
+      showAlert(
+        'Demo Created',
+        `Created a worker with salary overdue by ${daysAgo} days. Check the Dashboard and Notifications to see alerts.`
+      );
+    } catch (e: any) {
+      showAlert('Error', e?.message ?? 'Could not create demo worker.');
+    } finally {
+      setCreatingDemo(false);
+    }
+  }
+
   return (
     <Screen>
       <AppHeader title="Settings" transparent noBorder />
@@ -325,6 +394,20 @@ export default function SettingsScreen({ navigation }: any) {
                   thumbColor="#fff"
                 />
               </View>
+
+              <Pressable 
+                style={styles.item} 
+                onPress={createDemoOverdueWorker}
+                disabled={creatingDemo}
+              >
+                <View style={styles.itemLeft}>
+                  <Ionicons name="warning-outline" size={22} color={colors.brand} />
+                  <Text style={[styles.itemText, { color: colors.text }]}>
+                    {creatingDemo ? 'Creating...' : 'Create Overdue Worker (Demo)'}
+                  </Text>
+                </View>
+                <Ionicons name="chevron-forward" size={18} color={colors.subtext} />
+              </Pressable>
 
               <Pressable style={styles.item} onPress={pickCurrency}>
                 <View style={styles.itemLeft}>

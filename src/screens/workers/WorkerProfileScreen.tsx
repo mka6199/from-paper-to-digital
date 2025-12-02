@@ -15,7 +15,8 @@ import { showAlert } from '../../utils/alert';
 import Button from '../../components/primitives/Button';
 import Card from '../../components/primitives/Card';
 import { spacing, typography } from '../../theme/tokens';
-import { getWorker } from '../../services/workers';
+import { getWorker, Worker } from '../../services/workers';
+import { Payment, subscribeMyPaymentsInRange, rangeThisYear } from '../../services/payments';
 import { useTheme } from '../../theme/ThemeProvider';
 import { useCurrency } from '../../context/CurrencyProvider';
 
@@ -77,6 +78,8 @@ export default function WorkerProfileScreen({ navigation }: any) {
     initialWorker ? normalize(initialWorker) : null
   );
   const [loadError, setLoadError] = React.useState<string | null>(null);
+  const [payments, setPayments] = React.useState<Payment[]>([]);
+  const [fullWorker, setFullWorker] = React.useState<Worker | null>(null);
 
   const fetchWorker = React.useCallback(() => {
     let cancelled = false;
@@ -86,6 +89,7 @@ export default function WorkerProfileScreen({ navigation }: any) {
         const fresh = await getWorker(id);
         if (!cancelled && fresh) {
           setW(normalize({ id, ...(fresh as any) }));
+          setFullWorker(fresh);
         }
       } catch (e) {
         if (!cancelled) setLoadError('Unable to load worker details.');
@@ -103,6 +107,29 @@ export default function WorkerProfileScreen({ navigation }: any) {
     }, [fetchWorker])
   );
 
+  // Subscribe to this year's payments for stats
+  React.useEffect(() => {
+    if (!id) return;
+    const { start, end } = rangeThisYear();
+    let unsub: (() => void) | null = null;
+    try {
+      unsub = subscribeMyPaymentsInRange({ start, end }, (allPayments) => {
+        // Filter to only this worker's payments
+        const workerPayments = allPayments.filter(
+          (p) =>
+            String(p.workerId) === String(id) ||
+            (p.workerName && w?.name && String(p.workerName).toLowerCase() === String(w.name).toLowerCase())
+        );
+        setPayments(workerPayments);
+      });
+    } catch (e) {
+      console.warn('Failed to subscribe to payments:', e);
+    }
+    return () => {
+      unsub?.();
+    };
+  }, [id, w?.name]);
+
   React.useEffect(() => {
     const p: any = route?.params;
     if (p?.worker) setW(normalize(p.worker));
@@ -114,6 +141,46 @@ export default function WorkerProfileScreen({ navigation }: any) {
   const salaryLabelConverted = format(monthly) || salaryLabelFallback;
 
   const former = isFormerWorker(w);
+
+  // Compute payment summary
+  const paymentSummary = React.useMemo(() => {
+    if (payments.length === 0) {
+      return {
+        lastPaymentDate: null,
+        lastPaymentAmount: 0,
+        lastPaymentId: null,
+        totalPaidYTD: 0,
+        paymentCount: 0,
+        nextDueDate: fullWorker?.nextDueAt?.toDate?.() ?? null,
+      };
+    }
+
+    // Sort by date descending
+    const sorted = [...payments].sort((a, b) => {
+      const dateA = a.paidAt?.toDate?.()?.getTime() ?? 0;
+      const dateB = b.paidAt?.toDate?.()?.getTime() ?? 0;
+      return dateB - dateA;
+    });
+
+    const lastPayment = sorted[0];
+    const lastPaymentDate = lastPayment?.paidAt?.toDate?.() ?? null;
+    const lastPaymentAmount = Number(lastPayment?.amount ?? 0) + Number(lastPayment?.bonus ?? 0);
+    const lastPaymentId = lastPayment?.id ?? null;
+    
+    const totalPaidYTD = payments.reduce(
+      (sum, p) => sum + Number(p.amount ?? 0) + Number(p.bonus ?? 0),
+      0
+    );
+
+    return {
+      lastPaymentDate,
+      lastPaymentAmount,
+      lastPaymentId,
+      totalPaidYTD,
+      paymentCount: payments.length,
+      nextDueDate: fullWorker?.nextDueAt?.toDate?.() ?? null,
+    };
+  }, [payments, fullWorker]);
 
   function onPay() {
     if (former) {
@@ -249,6 +316,92 @@ export default function WorkerProfileScreen({ navigation }: any) {
             </View>
           </Card>
 
+          {/* Payment Summary Card */}
+          <Card
+            style={[
+              styles.summaryCard,
+              {
+                backgroundColor: colors.surface,
+                borderColor: colors.border,
+              },
+            ]}
+          >
+            <Text style={[typography.h2, { color: colors.text, marginBottom: spacing.md }]}>
+              Payment Summary
+            </Text>
+
+            <View style={styles.summaryGrid}>
+              <View style={styles.summaryItem}>
+                <Text style={[styles.summaryLabel, { color: colors.subtext }]}>
+                  Last Payment
+                </Text>
+                <Text style={[styles.summaryValue, { color: colors.text }]}>
+                  {paymentSummary.lastPaymentDate
+                    ? paymentSummary.lastPaymentDate.toLocaleDateString('en-GB', {
+                        day: 'numeric',
+                        month: 'short',
+                      })
+                    : 'Never'}
+                </Text>
+                {paymentSummary.lastPaymentAmount > 0 && (
+                  <Text style={[typography.small, { color: colors.subtext }]}>
+                    {format(paymentSummary.lastPaymentAmount)}
+                  </Text>
+                )}
+              </View>
+
+              <View style={styles.summaryItem}>
+                <Text style={[styles.summaryLabel, { color: colors.subtext }]}>
+                  Next Due
+                </Text>
+                <Text style={[styles.summaryValue, { color: colors.text }]}>
+                  {paymentSummary.nextDueDate
+                    ? paymentSummary.nextDueDate.toLocaleDateString('en-GB', {
+                        day: 'numeric',
+                        month: 'short',
+                      })
+                    : '—'}
+                </Text>
+              </View>
+            </View>
+
+            <View style={styles.summaryDivider} />
+
+            <View style={styles.summaryGrid}>
+              <View style={styles.summaryItem}>
+                <Text style={[styles.summaryLabel, { color: colors.subtext }]}>
+                  Total Paid (YTD)
+                </Text>
+                <Text style={[styles.summaryValue, { color: colors.brand }]}>
+                  {format(paymentSummary.totalPaidYTD)}
+                </Text>
+              </View>
+
+              <View style={styles.summaryItem}>
+                <Text style={[styles.summaryLabel, { color: colors.subtext }]}>
+                  Payments
+                </Text>
+                <Text style={[styles.summaryValue, { color: colors.text }]}>
+                  {paymentSummary.paymentCount}
+                </Text>
+              </View>
+            </View>
+
+            {paymentSummary.lastPaymentId && (
+              <View style={{ marginTop: spacing.md }}>
+                <Button
+                  label="View Latest Payslip"
+                  variant="outline"
+                  size="sm"
+                  onPress={() => {
+                    navigation.navigate('Payslip', { paymentId: paymentSummary.lastPaymentId });
+                  }}
+                  fullWidth
+                />
+              </View>
+            )}
+          </Card>
+
           <View style={styles.buttons}>
             <Button
               label="Pay Salary"
@@ -313,5 +466,32 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
     letterSpacing: 0.3,
+  },
+  summaryCard: {
+    padding: spacing.lg,
+    borderWidth: 1,
+    borderRadius: 16,
+    marginBottom: spacing.xl,
+  },
+  summaryGrid: {
+    flexDirection: 'row',
+    gap: spacing.lg,
+  },
+  summaryItem: {
+    flex: 1,
+    gap: 4,
+  },
+  summaryLabel: {
+    ...typography.small,
+    fontSize: 12,
+  },
+  summaryValue: {
+    ...typography.h2,
+    fontSize: 18,
+  },
+  summaryDivider: {
+    height: 1,
+    backgroundColor: '#E5E7EB',
+    marginVertical: spacing.md,
   },
 });

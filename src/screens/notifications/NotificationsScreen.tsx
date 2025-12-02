@@ -82,7 +82,7 @@ export default function NotificationsScreen() {
   const [rows, setRows] = React.useState<AppNotification[]>([]);
   const [ready, setReady] = React.useState(false);
   const [testBusy, setTestBusy] = React.useState(false);
-  const [activeFilter, setActiveFilter] = React.useState<'all' | 'unread' | NotificationCategory>('all');
+  const [activeFilter, setActiveFilter] = React.useState<'all' | 'unread' | NotificationCategory>('unread');
 
   // ----- subscriptions -----
   React.useEffect(() => {
@@ -173,12 +173,32 @@ export default function NotificationsScreen() {
 
   // ----- refresh notifications -----
   const refreshNotifications = React.useCallback(async () => {
-    if (workers.length === 0) return;
+    if (workers.length === 0) {
+      showAlert('No workers', 'Add workers to check for overdue salaries.');
+      return;
+    }
     
     const now = new Date();
     const nowSec = Math.floor(now.getTime() / 1000);
     const mStartSec = Math.floor(start.getTime() / 1000);
     const mEndSec = Math.floor(end.getTime() / 1000);
+
+    // Helper to calculate remaining salary
+    const salaryOf = (w: Worker) => Number(w.monthlySalaryAED ?? (w as any).baseSalary ?? 0) || 0;
+    const paidInWindow = (w: Worker) => {
+      return payments.reduce((sum, p) => {
+        const matches = 
+          (p.workerId && w.id && String(p.workerId) === String(w.id)) ||
+          String(p.workerId ?? '').toLowerCase() === String(w.id ?? '').toLowerCase() ||
+          String(p.workerName ?? '').toLowerCase() === String(w.name ?? '').toLowerCase();
+        if (!matches) return sum;
+        const t = p.paidAt?.toDate?.();
+        if (!t) return sum;
+        return t >= start && t <= end
+          ? sum + Number(p.amount ?? 0) + Number(p.bonus ?? 0)
+          : sum;
+      }, 0);
+    };
 
     const promises = workers
       .filter((w) => {
@@ -186,7 +206,11 @@ export default function NotificationsScreen() {
         if (!dueTs) return false;
         const inThisMonth = dueTs >= mStartSec && dueTs <= mEndSec;
         const isOverdue = dueTs <= nowSec;
-        return inThisMonth && isOverdue;
+        if (!inThisMonth || !isOverdue) return false;
+        
+        // Only create notification if there's remaining unpaid salary
+        const remaining = Math.max(0, salaryOf(w) - paidInWindow(w));
+        return remaining > 0;
       })
       .map((w) => {
         const dueKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
@@ -198,8 +222,14 @@ export default function NotificationsScreen() {
       });
 
     await Promise.all(promises);
-    showAlert('Refreshed', 'Notification check complete.');
-  }, [workers, start, end]);
+    
+    const count = promises.length;
+    if (count > 0) {
+      showAlert('Check complete', `Created ${count} notification${count === 1 ? '' : 's'} for overdue salaries.`);
+    } else {
+      showAlert('All clear', 'No overdue salaries found.');
+    }
+  }, [workers, payments, start, end]);
 
   const triggerSamples = React.useCallback(async () => {
     setTestBusy(true);
@@ -502,6 +532,54 @@ export default function NotificationsScreen() {
         ? { borderColor: tokenColors.danger, backgroundColor: 'rgba(185,28,28,0.08)' }
         : {};
 
+    // Action handlers
+    const handlePayNow = () => {
+      const workerId = item.workerId || (meta.workerId as string);
+      if (!workerId) {
+        showAlert('Cannot pay', 'Worker information not found.');
+        return;
+      }
+      markNotificationRead(item.id!, true);
+      (navigation as any).navigate('Workers', {
+        screen: 'PaySalary',
+        params: { workerId },
+      });
+    };
+
+    const handleViewWorker = () => {
+      const workerId = item.workerId || (meta.workerId as string);
+      if (!workerId) {
+        showAlert('Cannot view', 'Worker information not found.');
+        return;
+      }
+      markNotificationRead(item.id!, true);
+      (navigation as any).navigate('Workers', {
+        screen: 'WorkerProfile',
+        params: {
+          id: workerId,
+          worker: {
+            id: workerId,
+            name: item.workerName || meta.workerName || 'Worker',
+          },
+        },
+      });
+    };
+
+    // Determine which actions to show based on category
+    const showPayNow = !!(category === 'salary_due' && item.workerId);
+    const showViewWorker = !!(item.workerId || meta.workerId);
+    
+    // Debug logging
+    console.log('🔍 Notification debug:', {
+      id: item.id,
+      category,
+      workerId: item.workerId,
+      metaWorkerId: meta.workerId,
+      showPayNow,
+      showViewWorker,
+      shouldShowButtons: (showPayNow || showViewWorker),
+    });
+
     return (
       <View style={{ marginBottom: spacing.md }}>
         <Card style={[
@@ -510,8 +588,8 @@ export default function NotificationsScreen() {
           item.isRead === false && s.rowUnreadBG,
           accent,
         ]}>
-        <View style={{ flex: 1, gap: 6 }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+        <View style={{ flex: 1 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
             <View style={[s.badge, { backgroundColor: badgePalette.bg }]}>
               <Text style={[s.badgeText, { color: badgePalette.fg }]}>
                 {CATEGORY_META[category]?.label ?? 'Alert'}
@@ -521,11 +599,33 @@ export default function NotificationsScreen() {
           </View>
           <Text style={s.rowTitle} numberOfLines={2}>{item.title}</Text>
           {bodyText ? (
-            <Text style={s.rowSub} numberOfLines={2}>{bodyText}</Text>
+            <Text style={[s.rowSub, { marginTop: 6 }]} numberOfLines={2}>{bodyText}</Text>
           ) : null}
           {metadataLine ? (
-            <Text style={s.rowSub} numberOfLines={1}>{metadataLine}</Text>
+            <Text style={[s.rowSub, { marginTop: 6 }]} numberOfLines={1}>{metadataLine}</Text>
           ) : null}
+
+          {/* Action buttons row */}
+          {(showPayNow || showViewWorker) && (
+            <View style={{ flexDirection: 'row', marginTop: spacing.xs }}>
+              {showPayNow && (
+                <Button
+                  label="Pay Now"
+                  onPress={handlePayNow}
+                  variant="solid"
+                  style={{ flex: 1, marginRight: showViewWorker ? spacing.sm : 0 }}
+                />
+              )}
+              {showViewWorker && (
+                <Button
+                  label="View Worker"
+                  onPress={handleViewWorker}
+                  variant="soft"
+                  style={{ flex: 1 }}
+                />
+              )}
+            </View>
+          )}
         </View>
 
         <View style={{ gap: 8, alignItems: 'flex-end' }}>

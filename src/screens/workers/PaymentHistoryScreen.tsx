@@ -1,6 +1,7 @@
 import React from 'react';
-import { FlatList, StyleSheet, Text, View } from 'react-native';
+import { FlatList, StyleSheet, Text, View, Pressable } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useNavigation } from '@react-navigation/native';
 import Screen from '../../components/layout/Screen';
 import AppHeader from '../../components/layout/AppHeader';
 import Card from '../../components/primitives/Card';
@@ -28,20 +29,36 @@ function useFmtAED() {
 function PaymentRow({ p }: { p: Payment }) {
   const { colors } = useTheme();
   const fmtAED = useFmtAED();
+  const navigation = useNavigation<any>();
   const dt = p.paidAt?.toDate?.() ?? new Date();
   const d = dt.toISOString().slice(0, 10);
   const total = (Number(p.amount) || 0) + (Number(p.bonus) || 0);
 
   return (
-    <Card style={[styles.rowCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-      <Text style={[typography.h2, { marginBottom: 2, color: colors.text }]}>{d}</Text>
-      <Text style={[typography.small, { color: colors.subtext }]}>
-        Worker: {p.workerName ?? '—'} • Method: {p.method ?? '—'}
-      </Text>
-      <Text style={[typography.h2, { marginTop: spacing.sm, color: colors.text }]}>
-        {fmtAED(total)}
-      </Text>
-    </Card>
+    <Pressable
+      onPress={() => {
+        if (p.id) {
+          navigation.navigate('Payslip', { paymentId: p.id });
+        }
+      }}
+      accessibilityRole="button"
+      accessibilityLabel={`View payslip for payment on ${d}`}
+    >
+      <Card style={[styles.rowCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+          <View style={{ flex: 1 }}>
+            <Text style={[typography.h2, { marginBottom: 2, color: colors.text }]}>{d}</Text>
+            <Text style={[typography.small, { color: colors.subtext }]}>
+              Worker: {p.workerName ?? '—'} • Method: {p.method ?? '—'}
+            </Text>
+            <Text style={[typography.h2, { marginTop: spacing.sm, color: colors.text }]}>
+              {fmtAED(total)}
+            </Text>
+          </View>
+          <Text style={{ fontSize: 20, opacity: 0.5 }}>📄</Text>
+        </View>
+      </Card>
+    </Pressable>
   );
 }
 

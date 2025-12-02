@@ -24,6 +24,7 @@ import {
   rangeThisYear,
   monthRange,
 } from '../../services/payments';
+import { subscribePayRuns, PayRun } from '../../services/payruns';
 import { useTheme } from '../../theme/ThemeProvider';
 import { useCurrency } from '../../context/CurrencyProvider';
 import { logger } from '../../utils/logger';
@@ -54,6 +55,8 @@ export default function HistoryHomeScreen() {
   const [ready, setReady] = React.useState(false);
   const [workerQuery, setWorkerQuery] = React.useState('');
   const [pickerTarget, setPickerTarget] = React.useState<'start' | 'end' | null>(null);
+  
+  const [payRuns, setPayRuns] = React.useState<PayRun[]>([]);
 
   // Auto-update range when preset changes
   React.useEffect(() => {
@@ -153,6 +156,21 @@ export default function HistoryHomeScreen() {
       if (unsub) unsub();
     };
   }, [start.getTime(), end.getTime()]);
+
+  // Subscribe to pay runs
+  React.useEffect(() => {
+    let unsub: (() => void) | null = null;
+    try {
+      unsub = subscribePayRuns((runs) => {
+        setPayRuns(runs);
+      });
+    } catch (e) {
+      logger.warn('Pay runs subscribe failed:', e);
+    }
+    return () => {
+      if (unsub) unsub();
+    };
+  }, []);
 
   // Filter payments by worker query
   const filtered = React.useMemo(() => {
@@ -285,6 +303,51 @@ export default function HistoryHomeScreen() {
         onChangeText={setWorkerQuery}
         placeholder="Worker name or ID..."
       />
+
+      {/* Pay Runs Section */}
+      {payRuns.length > 0 && (
+        <View style={{ marginTop: spacing.lg }}>
+          <Text style={[typography.h2, { color: colors.text, marginBottom: spacing.sm }]}>
+            Recent Pay Runs
+          </Text>
+          {payRuns.slice(0, 3).map((run) => {
+            const createdDate = run.createdAt?.toDate?.() ?? null;
+            const dateStr = createdDate
+              ? createdDate.toLocaleDateString('en-GB', {
+                  day: 'numeric',
+                  month: 'short',
+                  year: 'numeric',
+                })
+              : '—';
+            return (
+              <Card
+                key={run.id}
+                style={{
+                  padding: spacing.md,
+                  borderWidth: 1,
+                  borderColor: colors.border,
+                  backgroundColor: colors.surface,
+                  marginBottom: spacing.sm,
+                }}
+              >
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[typography.body, { fontWeight: '700', color: colors.text }]}>
+                      Pay Run • {dateStr}
+                    </Text>
+                    <Text style={[typography.small, { color: colors.subtext }]}>
+                      {run.workerCount} worker{run.workerCount === 1 ? '' : 's'}
+                    </Text>
+                  </View>
+                  <Text style={[typography.h2, { color: colors.brand }]}>
+                    {format(run.totalAmount)}
+                  </Text>
+                </View>
+              </Card>
+            );
+          })}
+        </View>
+      )}
 
       {/* Date Range Display */}
       <Text

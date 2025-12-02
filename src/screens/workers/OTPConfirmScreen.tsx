@@ -6,19 +6,39 @@ import TextField from '../../components/primitives/TextField';
 import Button from '../../components/primitives/Button';
 import Card from '../../components/primitives/Card';
 import { addPayment } from '../../services/payments';
+import { resolveWorkerSalaryNotifications } from '../../services/notifications';
+import { createPayRun, WorkerDueItem } from '../../services/payruns';
+import { Worker as AppWorker } from '../../services/workers';
 import { spacing, typography } from '../../theme/tokens';
 import { useTheme } from '../../theme/ThemeProvider';
 import { useCurrency } from '../../context/CurrencyProvider';
 import { showAlert } from '../../utils/alert';
 
 type NavParams = {
-  workerId: string;
+  // Individual payment
+  workerId?: string;
   workerName?: string;
   phone?: string;
-  amount: number;
+  amount?: number;
   bonus?: number;
   method?: 'cash' | 'bank';
   month?: string;
+  
+  // Pay run batch payment
+  isPayRun?: boolean;
+  adminPhone?: string;
+  selectedWorkerIds?: string[];
+  selectedWorkerData?: Array<{
+    workerId: string;
+    workerName: string;
+    salary: number;
+    outstanding: number;
+  }>;
+  periodStart?: string;
+  periodEnd?: string;
+  totalAmount?: number;
+  workerCount?: number;
+  note?: string;
 };
 
 const SEND_OTP_URL =
@@ -29,6 +49,7 @@ const VERIFY_OTP_URL =
   'https://us-central1-from-paper-to-digital.cloudfunctions.net/verifyOtp';
 
 export default function OTPConfirmScreen({ route, navigation }: any) {
+  const params = (route?.params || {}) as NavParams;
   const {
     workerId,
     workerName,
@@ -37,10 +58,23 @@ export default function OTPConfirmScreen({ route, navigation }: any) {
     method,
     month,
     phone,
-  } = (route?.params || {}) as NavParams;
+    isPayRun,
+    adminPhone,
+    selectedWorkerIds,
+    selectedWorkerData,
+    periodStart,
+    periodEnd,
+    totalAmount,
+    workerCount,
+    note,
+  } = params;
 
   const { colors } = useTheme();
   const { format } = useCurrency();
+
+  // Determine which phone to use and display
+  const targetPhone = isPayRun ? adminPhone : phone;
+  const paymentAmount = isPayRun ? (totalAmount || 0) : (amount || 0);
 
   const [otp, setOtp] = useState('');
   const [otpError, setOtpError] = useState<string | null>(null);
@@ -66,15 +100,26 @@ export default function OTPConfirmScreen({ route, navigation }: any) {
   }, [cooldown]);
 
   const confirmEnabled = useMemo(() => {
-    const nAmt = Number(amount || 0);
-    return (
-      !!workerId &&
-      nAmt > 0 &&
-      String(otp).trim().length >= 4 &&
-      hasSentOtp &&
-      !busy
-    );
-  }, [workerId, amount, otp, busy, hasSentOtp]);
+    if (isPayRun) {
+      return (
+        !!adminPhone &&
+        !!selectedWorkerData &&
+        selectedWorkerData.length > 0 &&
+        String(otp).trim().length >= 4 &&
+        hasSentOtp &&
+        !busy
+      );
+    } else {
+      const nAmt = Number(amount || 0);
+      return (
+        !!workerId &&
+        nAmt > 0 &&
+        String(otp).trim().length >= 4 &&
+        hasSentOtp &&
+        !busy
+      );
+    }
+  }, [isPayRun, workerId, amount, adminPhone, selectedWorkerData, otp, busy, hasSentOtp]);
 
   useEffect(() => {
     return () => {
@@ -83,10 +128,12 @@ export default function OTPConfirmScreen({ route, navigation }: any) {
   }, []);
 
   async function onSendOtp() {
-    if (!phone) {
+    if (!targetPhone) {
       showAlert(
         'Missing phone number',
-        'This worker does not have a phone number saved.'
+        isPayRun 
+          ? 'Please add your phone number in Settings to authorize pay runs.'
+          : 'This worker does not have a phone number saved.'
       );
       return;
     }
@@ -101,7 +148,7 @@ export default function OTPConfirmScreen({ route, navigation }: any) {
       const res = await fetch(SEND_OTP_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone }),
+        body: JSON.stringify({ phone: targetPhone }),
         signal: controller.signal,
       });
       const data = await res.json().catch(() => null);
@@ -132,16 +179,7 @@ export default function OTPConfirmScreen({ route, navigation }: any) {
       showAlert('Send OTP first', 'Please send a code before confirming.');
       return;
     }
-    if (!workerId) {
-      showAlert('Missing worker id');
-      return;
-    }
-    const nAmt = Number(amount || 0);
-    if (!Number.isFinite(nAmt) || nAmt <= 0) {
-      showAlert('Enter a valid amount');
-      return;
-    }
-    if (!phone) {
+    if (!targetPhone) {
       showAlert('Missing phone number');
       return;
     }
@@ -152,10 +190,12 @@ export default function OTPConfirmScreen({ route, navigation }: any) {
       activeRequest.current?.abort();
       const controller = new AbortController();
       activeRequest.current = controller;
+      
+      // Verify OTP
       const res = await fetch(VERIFY_OTP_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone, code }),
+        body: JSON.stringify({ phone: targetPhone, code }),
         signal: controller.signal,
       });
       const data = await res.json().catch(() => null);
@@ -169,21 +209,80 @@ export default function OTPConfirmScreen({ route, navigation }: any) {
         return;
       }
 
-      await addPayment({
-        workerId,
-        workerName,
-        amount: nAmt,
-        bonus: Number(bonus || 0),
-        method: method || 'bank',
-        month: ensureYYYYMM(month),
-      });
+      // Handle pay run or individual payment
+      if (isPayRun) {
+        // Reconstruct WorkerDueItem objects from serialized data
+        const reconstructedWorkers: WorkerDueItem[] = selectedWorkerData!.map((data) => ({
+          worker: {
+            id: data.workerId,
+            name: data.workerName,
+          } as AppWorker,
+          salary: data.salary,
+          paidSoFar: data.salary - data.outstanding,
+          outstanding: data.outstanding,
+          dueAt: null,
+          isOverdue: false,
+        }));
 
-      navigation.replace('PaymentConfirmation', {
-        workerId,
-        workerName,
-        amount: nAmt,
-        method: method || 'bank',
-      });
+        // Create pay run with batch payment
+        await createPayRun({
+          periodStart: new Date(periodStart!),
+          periodEnd: new Date(periodEnd!),
+          selectedWorkers: reconstructedWorkers,
+          method: method || 'cash',
+          note: note || `Pay run for ${new Date(periodStart!).toLocaleDateString()}`,
+        });
+
+        // Auto-resolve notifications for all paid workers
+        await Promise.all(
+          selectedWorkerData!.map((data) =>
+            resolveWorkerSalaryNotifications(data.workerId).catch((e) =>
+              console.warn('Failed to resolve notifications for', data.workerId, e)
+            )
+          )
+        );
+
+        showAlert(
+          'Pay run completed',
+          `Successfully paid ${workerCount} worker(s) for ${format(totalAmount || 0)}.`
+        );
+        
+        navigation.navigate('WorkersList');
+      } else {
+        // Individual payment
+        if (!workerId) {
+          showAlert('Missing worker id');
+          return;
+        }
+        const nAmt = Number(amount || 0);
+        if (!Number.isFinite(nAmt) || nAmt <= 0) {
+          showAlert('Enter a valid amount');
+          return;
+        }
+
+        await addPayment({
+          workerId,
+          workerName,
+          amount: nAmt,
+          bonus: Number(bonus || 0),
+          method: method || 'bank',
+          month: ensureYYYYMM(month),
+        });
+
+        // Auto-resolve salary notifications for this worker
+        try {
+          await resolveWorkerSalaryNotifications(workerId);
+        } catch (e) {
+          console.warn('Failed to resolve notifications:', e);
+        }
+
+        navigation.replace('PaymentConfirmation', {
+          workerId,
+          workerName,
+          amount: nAmt,
+          method: method || 'bank',
+        });
+      }
     } catch (e: any) {
       if (e?.name === 'AbortError') return;
       showAlert('Payment failed', e?.message ?? 'Please try again.');
@@ -192,7 +291,7 @@ export default function OTPConfirmScreen({ route, navigation }: any) {
     }
   }
 
-  const displayAmount = format(Number(amount || 0));
+  const displayAmountFormatted = format(Number(paymentAmount));
 
   const sendOtpLabel =
     sending
@@ -203,24 +302,53 @@ export default function OTPConfirmScreen({ route, navigation }: any) {
 
   return (
     <Screen>
-      <AppHeader title="Confirm Payment" onBack={() => navigation.goBack()} transparent noBorder />
+      <AppHeader 
+        title={isPayRun ? "Confirm Pay Run" : "Confirm Payment"} 
+        onBack={() => navigation.goBack()} 
+        transparent 
+        noBorder 
+      />
 
       <View style={{ padding: spacing.lg, gap: spacing.lg }}>
         <Card style={[styles.card, { borderColor: colors.border }]}>
-          <Text style={[typography.h2, { color: colors.text }]}>
-            {workerName || 'Worker'}
-          </Text>
-          <Text style={[styles.sub, { color: colors.subtext }]}>
-            Amount: {displayAmount}
-          </Text>
-          {phone ? (
-            <Text style={[styles.sub, { color: colors.subtext }]}>
-              Phone: {phone}
-            </Text>
-          ) : null}
-          <Text style={[styles.sub, { color: colors.subtext }]}>
-            Method: {method === 'cash' ? 'Cash' : 'Bank transfer'}
-          </Text>
+          {isPayRun ? (
+            <>
+              <Text style={[typography.h2, { color: colors.text }]}>
+                Pay Run Batch Payment
+              </Text>
+              <Text style={[styles.sub, { color: colors.subtext }]}>
+                Workers: {workerCount}
+              </Text>
+              <Text style={[styles.sub, { color: colors.subtext }]}>
+                Total Amount: {displayAmountFormatted}
+              </Text>
+              {adminPhone && (
+                <Text style={[styles.sub, { color: colors.subtext }]}>
+                  Authorization Phone: {adminPhone}
+                </Text>
+              )}
+              <Text style={[styles.sub, { color: colors.subtext }]}>
+                Method: {method === 'cash' ? 'Cash' : 'Bank transfer'}
+              </Text>
+            </>
+          ) : (
+            <>
+              <Text style={[typography.h2, { color: colors.text }]}>
+                {workerName || 'Worker'}
+              </Text>
+              <Text style={[styles.sub, { color: colors.subtext }]}>
+                Amount: {displayAmountFormatted}
+              </Text>
+              {phone && (
+                <Text style={[styles.sub, { color: colors.subtext }]}>
+                  Phone: {phone}
+                </Text>
+              )}
+              <Text style={[styles.sub, { color: colors.subtext }]}>
+                Method: {method === 'cash' ? 'Cash' : 'Bank transfer'}
+              </Text>
+            </>
+          )}
         </Card>
 
         <Button
@@ -255,7 +383,7 @@ export default function OTPConfirmScreen({ route, navigation }: any) {
         </View>
 
         <Button
-          label={busy ? 'Processing…' : 'Confirm Payment'}
+          label={busy ? 'Processing…' : (isPayRun ? 'Confirm Pay Run' : 'Confirm Payment')}
           onPress={onConfirm}
           disabled={!confirmEnabled}
           fullWidth

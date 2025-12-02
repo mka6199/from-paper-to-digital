@@ -355,7 +355,7 @@ export async function generateNotificationSamples() {
     ownerUid: uid,
     category: 'task_assignment',
     title: 'Worker document pending approval',
-    body: 'Review Ahmad’s visa file before Friday.',
+    body: 'Review Ahmad\'s visa file before Friday.',
     metadata: { workerName: 'Ahmad', extra: { checklist: 'visa' } },
   });
   await queueNotification({
@@ -365,3 +365,30 @@ export async function generateNotificationSamples() {
     body: 'Monthly insights report was refreshed.',
   });
 }
+
+/**
+ * Auto-resolve salary-due notifications for a worker after payment.
+ * Marks matching unread salary_due notifications as read.
+ */
+export async function resolveWorkerSalaryNotifications(workerId: string) {
+  const uid = (await ensureAuth()).uid;
+  
+  const q = query(
+    COL,
+    where('ownerUid', '==', uid),
+    where('workerId', '==', workerId),
+    where('category', '==', 'salary_due'),
+    where('isRead', '==', false)
+  );
+
+  const snap = await getDocs(q);
+  const promises = snap.docs.map((docSnap) =>
+    updateDoc(docSnap.ref, {
+      isRead: true,
+      updatedAt: serverTimestamp(),
+    })
+  );
+
+  await Promise.all(promises);
+}
+

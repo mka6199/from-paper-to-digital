@@ -11,6 +11,8 @@ import PaymentHistoryScreen from '../../screens/workers/PaymentHistoryScreen';
 
 import AddWorkerScreen from '../../screens/workers/AddWorkerScreen';
 import EditWorkerScreen from '../../screens/workers/EditWorkerScreen';
+import PayRunScreen from '../../screens/payroll/PayRunScreen';
+import PayslipScreen from '../../screens/workers/PayslipScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -28,6 +30,8 @@ export default function WorkersStack() {
 
       <Stack.Screen name="AddWorker" component={AddWorkerScreen} />
       <Stack.Screen name="EditWorker" component={EditWorkerScreen} />
+      <Stack.Screen name="PayRun" component={PayRunScreen} />
+      <Stack.Screen name="Payslip" component={PayslipScreen} />
     </Stack.Navigator>
   );
 }
